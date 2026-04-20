@@ -1,0 +1,858 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Emlak | Hayalindeki Evi Bul</title>
+    
+    <!-- Google Fonts: Inter -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    
+    <!-- FontAwesome for Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <!-- Main Styles -->
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+    <!-- LOGIN YÜZEYİ -->
+    <section id="login-view" class="view-section active">
+        <div class="login-container glass-panel">
+            <h1 class="logo">Emlak<span>Vitrini</span></h1>
+            <p class="subtitle">Hayalinizdeki eve bir adım daha yaklaşın.</p>
+            
+            <div class="tab-header">
+                <button class="tab-btn active" data-tab="bireysel">Bireysel</button>
+                <button class="tab-btn" data-tab="kurumsal">Kurumsal</button>
+            </div>
+
+            <!-- BİREYSEL FORM -->
+            <div class="tab-content active" id="tab-bireysel">
+                <!-- Bireysel Giriş Alanı -->
+                <div id="bireysel-login-area">
+                    <form class="auth-form" onsubmit="event.preventDefault(); handleBireyselLogin();">
+                        <div class="input-group">
+                            <i class="fa-regular fa-envelope"></i>
+                            <input type="email" id="bireysel-login-email" placeholder="E-mail Adresiniz" required>
+                        </div>
+                        <div class="input-group mt-2">
+                             <i class="fa-solid fa-lock"></i>
+                             <input type="password" placeholder="Şifreniz (Varsa)" >
+                        </div>
+                        
+                        <button type="submit" class="btn btn-primary mt-2">Giriş Yap</button>
+                        
+                        <p class="help-text mt-2" style="font-size: 0.95rem; margin-top: 1rem;">Hesabınız yok mu? <a href="#" onclick="toggleBireyselAuth('signup')" style="font-weight: 600;">Hemen Üye Olun</a></p>
+
+                        <div class="divider"><span>veya şununla devam et</span></div>
+                        
+                        <div class="social-login">
+                            <button type="button" class="btn btn-social" onclick="dashboardLogin('bireysel')">
+                                <img src="https://cdn-icons-png.flaticon.com/512/2991/2991148.png" alt="Google"> Google
+                            </button>
+                            <button type="button" class="btn btn-social" onclick="dashboardLogin('bireysel')">
+                                <i class="fa-brands fa-apple"></i> Apple
+                            </button>
+                        </div>
+                    </form>
+                    
+                    <button class="btn btn-text mt-3" onclick="dashboardLogin('bireysel')">
+                        <i class="fa-solid fa-compass"></i> Üye olmadan gözat (Misafir)
+                    </button>
+                </div>
+
+                <!-- Bireysel Kayıt Ol Alanı -->
+                <div id="bireysel-signup-area" style="display: none;">
+                    <form class="auth-form" onsubmit="event.preventDefault(); handleBireyselSignup();">
+                        <div class="input-group">
+                            <i class="fa-regular fa-envelope"></i>
+                            <input type="email" id="ind-signup-email" placeholder="E-mail Adresiniz" required>
+                        </div>
+                        <div class="input-group mt-2">
+                            <i class="fa-solid fa-lock"></i>
+                            <input type="password" id="ind-signup-pass" placeholder="Şifreniz (En az 6 karakter)" required minlength="6">
+                        </div>
+                        
+                        <button type="submit" class="btn btn-accent mt-3">Kayıt Ol</button>
+                        
+                        <p class="help-text mt-2" style="font-size: 0.95rem; margin-top: 1rem;">Zaten hesabınız var mı? <a href="#" onclick="toggleBireyselAuth('login')" style="font-weight: 600;">Giriş Yapın</a></p>
+                    </form>
+                </div>
+            </div>
+
+            <!-- KURUMSAL FORM -->
+            <div class="tab-content" id="tab-kurumsal">
+                <form class="auth-form" onsubmit="event.preventDefault(); dashboardLogin('kurumsal');">
+                    <div class="input-group">
+                        <i class="fa-solid fa-briefcase"></i>
+                        <input type="email" placeholder="Kurumsal E-mail Adresiniz" required>
+                    </div>
+                    <div class="input-group">
+                        <i class="fa-solid fa-lock"></i>
+                        <input type="password" placeholder="Şifreniz" required>
+                    </div>
+                    <button type="submit" class="btn btn-primary mt-2">Giriş Yap</button>
+                </form>
+                <p class="help-text">Kurumsal üyelik oluşturmak için <a href="#" onclick="openCorpSignupModal(); event.preventDefault();">kurumsal formu</a> doldurun.</p>
+            </div>
+            
+        </div>
+        <div class="login-bg-overlay"></div>
+    </section>
+
+    <!-- DASHBOARD YÜZEYİ -->
+    <section id="dashboard-view" class="view-section">
+        <!-- Navbar -->
+        <nav class="navbar">
+            <div class="nav-container">
+                <h2 class="logo-small">Emlak<span>Vitrini</span></h2>
+                <div class="nav-links">
+                    <!-- Yeni Eşleşme Butonu -->
+                    <button id="ind-match-btn" class="btn btn-primary" style="display:none; background-color: #10B981; border-color: #10B981; gap:6px; font-weight:700;" onclick="showUserMatch()">
+                        <i class="fa-solid fa-bell fa-shake"></i> Sana Özel Eşleşme Bulundu
+                    </button>
+                    <div class="user-profile interactive-profile" onclick="openUserProfile()" style="cursor: pointer; padding: 4px 10px; border-radius: 50px; transition: background 0.2s;">
+                        <img id="nav-user-avatar" src="https://ui-avatars.com/api/?name=Misafir&background=1E3A5F&color=fff" alt="User">
+                        <span id="nav-user-name">Hesabım</span>
+                    </div>
+                    <button class="btn-logout" onclick="logout()">
+                        <i class="fa-solid fa-arrow-right-from-bracket"></i> Çıkış
+                    </button>
+                </div>
+            </div>
+        </nav>
+
+        <!-- Hero & Filter -->
+        <div class="hero">
+            <div class="hero-content" style="max-width: 1100px; margin: 0 auto; text-align: center;">
+                
+                <h1 style="font-size: 2.5rem; margin-bottom: 2rem;">Hayalinizdeki Evi Birlikte Bulalım</h1>
+                
+                <!-- Ana Fikir: Dev Talep Formu Butonu -->
+                <div class="main-cta-box glass-panel-dark" style="margin-bottom: 4rem; padding: 3.5rem 2rem; border: 1px solid rgba(255,255,255,0.2); border-radius: var(--border-radius-lg); box-shadow: 0 25px 50px -12px rgba(0,0,0,0.25);">
+                    <h2 style="color: white; margin-bottom: 1rem; font-size: 1.8rem;">Odanız, Mahalleniz, Bütçeniz...<br><span style="color:#F59E0B;">Siz İsteyin Biz Bulalım!</span></h2>
+                    <p style="color: #cbd5e1; margin-bottom: 2.5rem; font-size: 1.1rem; line-height: 1.6; max-width: 600px; margin-left: auto; margin-right: auto;">Siz talebinizi iletin, yapay zeka destekli altyapımız sizin için en uygun evi portföyümüzde arasın. Eşleşme olduğunda anında haberiniz olsun.</p>
+                    <button id="request-form-btn" class="btn btn-primary" style="display: inline-flex; font-size: 1.25rem; padding: 1.25rem 3.5rem; transition: transform 0.2s; box-shadow: 0 10px 20px -5px rgba(245, 158, 11, 0.5); border-radius: 50px;" onclick="openRequestModal()">
+                        <i class="fa-solid fa-wand-magic-sparkles"></i> Özel Talep Formu Doldur (Ücretsiz)
+                    </button>
+                </div>
+
+                <!-- Yatay Arama Çubuğu (Geri Planda) -->
+                <div class="modern-filter-bar">
+                    <div class="modern-filter-group" style="padding-top: 0; padding-bottom: 0;">
+                        <label style="margin-top: 8px;">İşlem Türü</label>
+                        <input type="hidden" id="filter-type" value="Tümü">
+                        <div class="ios-picker-container ios-picker-mini" style="border:none; background:transparent;">
+                            <div class="ios-picker-highlight"></div>
+                            <ul class="ios-picker-list">
+                                <li class="ios-picker-item selected">Tümü</li>
+                                <li class="ios-picker-item">Satılık</li>
+                                <li class="ios-picker-item">Kiralık</li>
+                            </ul>
+                        </div>
+                    </div>
+
+                    <div class="modern-filter-divider"></div>
+
+                    <div class="modern-filter-group" style="flex: 1.5; justify-content: center;">
+                        <label>Şehir / Konum</label>
+                        <input type="text" id="filter-location" value="Tekirdağ / Çorlu" readonly style="color: var(--text-light); cursor: not-allowed; opacity: 0.8; font-size: 0.95rem;">
+                    </div>
+
+                    <div class="modern-filter-divider"></div>
+
+                    <div class="modern-filter-group" style="padding-top: 0; padding-bottom: 0;">
+                        <label style="margin-top: 8px;">Oda Sayısı</label>
+                        <input type="hidden" id="filter-rooms" value="Tümü">
+                        <div class="ios-picker-container ios-picker-mini" style="border:none; background:transparent;">
+                            <div class="ios-picker-highlight"></div>
+                            <ul class="ios-picker-list">
+                                <li class="ios-picker-item selected">Tümü</li>
+                                <li class="ios-picker-item">1+1</li>
+                                <li class="ios-picker-item">2+1</li>
+                                <li class="ios-picker-item">3+1</li>
+                                <li class="ios-picker-item">4+1</li>
+                            </ul>
+                        </div>
+                    </div>
+
+                    <button class="btn btn-accent modern-filter-btn" onclick="applyFilters()">
+                        <i class="fa-solid fa-magnifying-glass"></i> Ara
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Yükleniyor ve İlanlar İçerik -->
+        <main class="dashboard-content">
+            <div class="main-header">
+                <h3>Öne Çıkan İlanlar</h3>
+                <span class="result-count" id="result-count">0 İlan bulundu</span>
+            </div>
+            
+            <div class="property-grid" id="property-grid">
+                <!-- İlan Kartları JS ile buraya basılacak -->
+            </div>
+        </main>
+
+        <!-- Özel Talep Formu Modalı -->
+        <div id="request-modal" class="modal">
+            <div class="modal-content glass-panel">
+                <span class="close-modal" onclick="closeRequestModal()">&times;</span>
+                <h2>Özel Ev Arama Talebi</h2>
+                <p class="subtitle" style="margin-bottom: 1.5rem; text-align: left;">Aradığınız evi bulmamız için bize detayları iletin.</p>
+                
+                <form onsubmit="event.preventDefault(); submitRequestForm();" class="request-form">
+                    <!-- İşlem Türü -->
+                    <div class="form-section">
+                        <h4>İşlem Türü</h4>
+                        <div class="radio-group">
+                            <label><input type="radio" name="req_type" value="Satılık" checked> Satılık</label>
+                            <label><input type="radio" name="req_type" value="Kiralık"> Kiralık</label>
+                        </div>
+                    </div>
+
+                    <!-- Kişisel Bilgiler -->
+                    <div class="form-section">
+                        <h4>Kişisel Bilgiler</h4>
+                        <div class="input-row">
+                            <input type="text" placeholder="Adınız" required>
+                            <input type="text" placeholder="Soyadınız" required>
+                        </div>
+                        <input type="tel" placeholder="Telefon Numaranız" required style="width: 100%; margin-top: 10px;">
+                    </div>
+
+                    <!-- Konum Tercihleri -->
+                    <div class="form-section">
+                        <h4>Konum Tercihleri</h4>
+                        <div class="input-row">
+                            <input type="text" value="Tekirdağ" readonly style="background-color: #e2e8f0; cursor: not-allowed; font-weight: 600;" required>
+                            <input type="text" value="Çorlu" readonly style="background-color: #e2e8f0; cursor: not-allowed; font-weight: 600;" required>
+                        </div>
+                        <div style="margin-top: 15px;">
+                            <label style="font-size: 0.9rem; color: var(--text-light); margin-bottom: 5px; display: block;">Mahalle Seçimi (Listeyi Kaydırın)</label>
+                            <input type="hidden" id="selected-mahalle" name="mahalle" value="Alipaşa" required>
+                            <div class="ios-picker-container">
+                                <div class="ios-picker-highlight"></div>
+                                <ul class="ios-picker-list" id="mahalle-picker">
+                                    <li class="ios-picker-item selected">Alipaşa</li>
+                                    <li class="ios-picker-item">Cemaliye</li>
+                                    <li class="ios-picker-item">Cumhuriyet</li>
+                                    <li class="ios-picker-item">Çobançeşme</li>
+                                    <li class="ios-picker-item">Deregündüzlü</li>
+                                    <li class="ios-picker-item">Esentepe</li>
+                                    <li class="ios-picker-item">Hatip</li>
+                                    <li class="ios-picker-item">Havuzlar</li>
+                                    <li class="ios-picker-item">Hıdırağa</li>
+                                    <li class="ios-picker-item">Hürriyet</li>
+                                    <li class="ios-picker-item">Kazımiye</li>
+                                    <li class="ios-picker-item">Kemalettin</li>
+                                    <li class="ios-picker-item">Maksutlu</li>
+                                    <li class="ios-picker-item">Muhittin</li>
+                                    <li class="ios-picker-item">Nusratiye</li>
+                                    <li class="ios-picker-item">Önerler</li>
+                                    <li class="ios-picker-item">Reşadiye</li>
+                                    <li class="ios-picker-item">Rumeli</li>
+                                    <li class="ios-picker-item">Sarılar</li>
+                                    <li class="ios-picker-item">Seymen</li>
+                                    <li class="ios-picker-item">Silahtarağa</li>
+                                    <li class="ios-picker-item">Şahpaz</li>
+                                    <li class="ios-picker-item">Şeyhsinan</li>
+                                    <li class="ios-picker-item">Türkgücü</li>
+                                    <li class="ios-picker-item">Yenice</li>
+                                    <li class="ios-picker-item">Zafer</li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Ev Özellikleri -->
+                    <div class="form-section">
+                        <h4>Ev Özellikleri</h4>
+                        <div class="input-row">
+                            <input type="number" placeholder="Bina Yaşı (Örn: 5)" required>
+                            <input type="number" placeholder="Metrekare (Minimum)" required>
+                        </div>
+                        <select style="width: 100%; margin-top: 10px;" required>
+                            <option value="" disabled selected>Oda Sayısı</option>
+                            <option value="1+0">1+0 (Stüdyo)</option>
+                            <option value="1+1">1+1</option>
+                            <option value="2+1">2+1</option>
+                            <option value="3+1">3+1</option>
+                            <option value="4+1">4+1 ve üzeri</option>
+                        </select>
+                    </div>
+
+                    <!-- Bütçe -->
+                    <div class="form-section" style="border-bottom: none; margin-bottom: 0;">
+                        <h4>Bütçe Planınız</h4>
+                        <div class="input-row">
+                            <input type="number" placeholder="Minimum (₺)" required>
+                            <input type="number" placeholder="Maksimum (₺)" required>
+                        </div>
+                    </div>
+
+                    <button type="submit" class="btn btn-accent mt-3">Talebi Gönder</button>
+                </form>
+            </div>
+        </div>
+        
+    </section>
+
+    <!-- KURUMSAL DASHBOARD YÜZEYİ -->
+    <section id="corporate-view" class="view-section">
+        <!-- Navbar -->
+        <nav class="navbar">
+            <div class="nav-container">
+                <h2 class="logo-small">Emlak<span>Vitrini</span> <span style="font-size:1rem; color:var(--text-light);">(Ofis)</span></h2>
+                <div class="nav-links">
+                    <div class="coin-balance" onclick="openCoinModal()">
+                        <i class="fa-solid fa-coins" style="color:#F59E0B;"></i>
+                        <span id="nav-coin-amount">150</span>
+                        <div class="coin-add-btn"><i class="fa-solid fa-plus"></i></div>
+                    </div>
+                    <button class="btn btn-primary" onclick="openAddPropertyModal()">
+                        <i class="fa-solid fa-plus"></i> Yeni İlan Ekle
+                    </button>
+                    <div class="user-profile">
+                        <img src="https://ui-avatars.com/api/?name=Kurumsal+Hesap&background=1E3A5F&color=fff" alt="User">
+                        <span>Hesabım</span>
+                    </div>
+                    <button class="btn-logout" onclick="logout()">
+                        <i class="fa-solid fa-arrow-right-from-bracket"></i> Çıkış
+                    </button>
+                </div>
+            </div>
+        </nav>
+
+        <!-- İçerik -->
+        <main class="dashboard-content" style="margin-top: 2rem;">
+            <div class="main-header">
+                <h3>Yayınladığım İlanlar</h3>
+                <span class="result-count" id="corp-result-count">0 İlan Yayınlandı</span>
+            </div>
+            
+            <div class="property-grid" id="corp-property-grid">
+                <!-- Kurumsal İlan Kartları JS ile buraya basılacak -->
+            </div>
+        </main>
+
+        <!-- İlan Ekleme Modalı -->
+        <div id="add-property-modal" class="modal">
+            <div class="modal-content glass-panel" style="max-width: 900px; padding: 2.5rem 3rem;">
+                <span class="close-modal" onclick="closeAddPropertyModal()">&times;</span>
+                <h2>Yeni İlan Oluştur</h2>
+                <p class="subtitle" style="margin-bottom: 2rem; text-align: left; color: var(--text-light);">İlanınızın detaylarını eksiksiz girin. Bireysel panelden gelen taleplerle otomatik eşleştirilecektir.</p>
+                
+                <form onsubmit="event.preventDefault(); submitAddPropertyForm();" id="add-property-form" class="request-form" style="margin-top:0;">
+                    <div class="form-grid">
+                        
+                        <!-- Sol Kolon -->
+                        <div class="form-column">
+                            <!-- Temel Bilgiler -->
+                            <div class="form-section" style="border: none; padding-bottom: 0;">
+                                <h4><i class="fa-solid fa-tags"></i> Temel Bilgiler</h4>
+                                <div class="input-group-custom">
+                                    <label>İlan Başlığı</label>
+                                    <input type="text" id="prop-title" placeholder="Örn: Merkezde 3+1 Lüks Daire" required>
+                                </div>
+                                <div class="input-row mt-3">
+                                    <div class="input-group-custom" style="flex: 1;">
+                                        <label>İşlem Türü</label>
+                                        <div class="radio-badge-group">
+                                            <label class="radio-badge">
+                                                <input type="radio" name="prop_type" value="Satılık" checked>
+                                                <span>Satılık</span>
+                                            </label>
+                                            <label class="radio-badge">
+                                                <input type="radio" name="prop_type" value="Kiralık">
+                                                <span>Kiralık</span>
+                                            </label>
+                                        </div>
+                                    </div>
+                                    <div class="input-group-custom" style="flex: 1;">
+                                        <label>İlan Fiyatı (₺)</label>
+                                        <input type="number" id="prop-price" placeholder="Örn: 2500000" required>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <!-- Konum -->
+                            <div class="form-section" style="border: none; padding-bottom: 0; margin-top: 1.5rem;">
+                                <h4><i class="fa-solid fa-map-location-dot"></i> Konum Bilgileri</h4>
+                                <div class="info-alert mb-3">
+                                    <i class="fa-solid fa-circle-info"></i> Sistem şimdilik sadece <b>Tekirdağ / Çorlu</b> bölgesiyle kısıtlıdır.
+                                </div>
+                                
+                                <div class="input-group-custom">
+                                    <label>Mahalle Seçimi (Kutuyu Kaydırarak Seçin)</label>
+                                    <input type="hidden" id="corp-selected-mahalle" value="Alipaşa" required>
+                                    <div class="ios-picker-container" style="height: 120px;">
+                                        <div class="ios-picker-highlight" style="top: 35px; height: 50px;"></div>
+                                        <ul class="ios-picker-list" style="padding: 35px 0;">
+                                            <li class="ios-picker-item selected">Alipaşa</li>
+                                            <li class="ios-picker-item">Cemaliye</li>
+                                            <li class="ios-picker-item">Cumhuriyet</li>
+                                            <li class="ios-picker-item">Çobançeşme</li>
+                                            <li class="ios-picker-item">Deregündüzlü</li>
+                                            <li class="ios-picker-item">Esentepe</li>
+                                            <li class="ios-picker-item">Hatip</li>
+                                            <li class="ios-picker-item">Havuzlar</li>
+                                            <li class="ios-picker-item">Hıdırağa</li>
+                                            <li class="ios-picker-item">Hürriyet</li>
+                                            <li class="ios-picker-item">Kazımiye</li>
+                                            <li class="ios-picker-item">Kemalettin</li>
+                                            <li class="ios-picker-item">Maksutlu</li>
+                                            <li class="ios-picker-item">Muhittin</li>
+                                            <li class="ios-picker-item">Nusratiye</li>
+                                            <li class="ios-picker-item">Önerler</li>
+                                            <li class="ios-picker-item">Reşadiye</li>
+                                            <li class="ios-picker-item">Rumeli</li>
+                                            <li class="ios-picker-item">Sarılar</li>
+                                            <li class="ios-picker-item">Seymen</li>
+                                            <li class="ios-picker-item">Silahtarağa</li>
+                                            <li class="ios-picker-item">Şahpaz</li>
+                                            <li class="ios-picker-item">Şeyhsinan</li>
+                                            <li class="ios-picker-item">Türkgücü</li>
+                                            <li class="ios-picker-item">Yenice</li>
+                                            <li class="ios-picker-item">Zafer</li>
+                                        </ul>
+                                    </div>
+                                </div>
+                                <div class="input-group-custom mt-3">
+                                    <label>Açık Adres veya Harita Linki (Opsiyonel)</label>
+                                    <input type="text" id="prop-map-link" placeholder="Cadde, sokak veya Google Maps linki">
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Sağ Kolon -->
+                        <div class="form-column">
+                            <!-- Ev Özellikleri -->
+                            <div class="form-section" style="border: none; padding-bottom: 0;">
+                                <h4><i class="fa-solid fa-house"></i> Ev Detayları</h4>
+                                <div class="input-row">
+                                    <div class="input-group-custom">
+                                        <label>Bina Yaşı</label>
+                                        <input type="number" id="prop-age" placeholder="Örn: 5" required>
+                                    </div>
+                                    <div class="input-group-custom">
+                                        <label>Net Metrekare (m²)</label>
+                                        <input type="number" id="prop-area" placeholder="Örn: 120" required>
+                                    </div>
+                                </div>
+                                <div class="input-group-custom mt-3">
+                                    <label>Oda Sayısı</label>
+                                    <select id="prop-rooms" required>
+                                        <option value="" disabled selected>Seçiniz</option>
+                                        <option value="1+0">1+0 (Stüdyo)</option>
+                                        <option value="1+1">1+1</option>
+                                        <option value="2+1">2+1</option>
+                                        <option value="3+1">3+1</option>
+                                        <option value="4+1">4+1 ve üzeri</option>
+                                    </select>
+                                </div>
+                            </div>
+                            
+                            <!-- Açıklama -->
+                            <div class="form-section" style="border: none; padding-bottom: 0; margin-top: 1.5rem;">
+                                <h4><i class="fa-solid fa-indent"></i> İlan Açıklaması</h4>
+                                <div class="input-group-custom">
+                                    <textarea id="prop-desc" placeholder="Dairenin özellikleri hakkında detaylı bilgi verin..." rows="3" required></textarea>
+                                </div>
+                            </div>
+
+                            <!-- Fotoğraflar -->
+                            <div class="form-section" style="border: none; padding-bottom: 0; margin-top: 1.5rem; margin-bottom: 0;">
+                                <h4><i class="fa-solid fa-camera"></i> Fotoğraflar (Max 10)</h4>
+                                <div class="file-drop-area" id="file-drop-area" style="padding: 1.5rem 1rem;">
+                                    <i class="fa-solid fa-cloud-arrow-up" style="font-size: 2rem; color: var(--primary); margin-bottom: 8px;"></i>
+                                    <p style="color:var(--text-light); font-size: 0.9rem; margin-bottom: 0;">Sürükle bırak veya <b>Bilgisayardan Seç</b></p>
+                                    <input type="file" id="prop-images" multiple accept="image/*" style="opacity: 0; position: absolute; top:0; left:0; width:100%; height:100%; cursor: pointer;">
+                                </div>
+                                <p id="file-count-warning" style="display: none; color: var(--accent); font-size: 0.85rem; margin-top: 5px;">En fazla 10 fotoğraf yükleyebilirsiniz!</p>
+                                <div id="image-preview-container" class="image-preview-grid mt-2"></div>
+                            </div>
+                        </div>
+
+                    </div>
+                    
+                    <div style="text-align: right; margin-top: 2rem; padding-top: 1.5rem; border-top: 1px solid var(--border); display: flex; justify-content: flex-end; align-items: center; gap: 1rem;">
+                        <button type="button" class="btn btn-text" onclick="closeAddPropertyModal()" style="width: auto;">İptal</button>
+                        <button type="submit" class="btn btn-primary" style="width: 200px;">
+                            <i class="fa-solid fa-check"></i> İlanı Yayınla
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- İlan Düzenleme/Kaldırma Modalı -->
+        <div id="manage-property-modal" class="modal">
+            <div class="modal-content glass-panel" style="max-width: 900px; padding: 2.5rem 3rem;">
+                <span class="close-modal" onclick="closeManagePropertyModal()">&times;</span>
+                <h2>İlanı Yönet</h2>
+                <p class="subtitle" style="margin-bottom: 2rem; text-align: left; color: var(--text-light);">İlan detaylarını güncelleyebilir veya yayından kaldırabilirsiniz.</p>
+                
+                <form onsubmit="event.preventDefault(); submitManagePropertyForm();" id="manage-property-form" class="request-form" style="margin-top:0;">
+                    <input type="hidden" id="manage-prop-id">
+                    <div class="form-grid">
+                        
+                        <!-- Sol Kolon -->
+                        <div class="form-column">
+                            <!-- Temel Bilgiler -->
+                            <div class="form-section" style="border: none; padding-bottom: 0;">
+                                <h4><i class="fa-solid fa-tags"></i> Temel Bilgiler</h4>
+                                <div class="input-group-custom">
+                                    <label>İlan Başlığı</label>
+                                    <input type="text" id="manage-prop-title" required>
+                                </div>
+                                <div class="input-row mt-3">
+                                    <div class="input-group-custom" style="flex: 1;">
+                                        <label>İşlem Türü</label>
+                                        <div class="radio-badge-group">
+                                            <label class="radio-badge">
+                                                <input type="radio" name="manage_prop_type" value="Satılık" id="manage-type-satilik">
+                                                <span>Satılık</span>
+                                            </label>
+                                            <label class="radio-badge">
+                                                <input type="radio" name="manage_prop_type" value="Kiralık" id="manage-type-kiralik">
+                                                <span>Kiralık</span>
+                                            </label>
+                                        </div>
+                                    </div>
+                                    <div class="input-group-custom" style="flex: 1;">
+                                        <label>İlan Fiyatı (₺)</label>
+                                        <input type="number" id="manage-prop-price" required>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <!-- Konum -->
+                            <div class="form-section" style="border: none; padding-bottom: 0; margin-top: 1.5rem;">
+                                <h4><i class="fa-solid fa-map-location-dot"></i> Konum Bilgileri</h4>
+                                <div class="input-group-custom">
+                                    <label>Mahalle</label>
+                                    <input type="text" id="manage-prop-mahalle" readonly style="background-color:#e2e8f0; cursor:not-allowed;" title="Lokasyon değiştirilemez">
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Sağ Kolon -->
+                        <div class="form-column">
+                            <!-- Ev Özellikleri -->
+                            <div class="form-section" style="border: none; padding-bottom: 0;">
+                                <h4><i class="fa-solid fa-house"></i> Ev Detayları</h4>
+                                <div class="input-row">
+                                    <div class="input-group-custom">
+                                        <label>Net Metrekare (m²)</label>
+                                        <input type="text" id="manage-prop-area" required>
+                                    </div>
+                                </div>
+                                <div class="input-group-custom mt-3">
+                                    <label>Oda Sayısı</label>
+                                    <select id="manage-prop-rooms" required>
+                                        <option value="1+0">1+0 (Stüdyo)</option>
+                                        <option value="1+1">1+1</option>
+                                        <option value="2+1">2+1</option>
+                                        <option value="3+1">3+1</option>
+                                        <option value="4+1">4+1 ve üzeri</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+
+                    </div>
+                    
+                    <div style="text-align: right; margin-top: 2rem; padding-top: 1.5rem; border-top: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; gap: 1rem;">
+                        <button type="button" class="btn btn-accent" onclick="deleteCorporateProperty()" style="width: auto; background-color: #ef4444;">
+                            <i class="fa-regular fa-trash-can"></i> İlanı Kaldır
+                        </button>
+                        <div style="display:flex; gap:1rem;">
+                            <button type="button" class="btn btn-text" onclick="closeManagePropertyModal()" style="width: auto;">İptal</button>
+                            <button type="submit" class="btn btn-primary" style="width: 200px;">
+                                <i class="fa-solid fa-check"></i> Güncelle
+                            </button>
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- Eşleşme Kullanıcı Detay Modalı -->
+        <div id="match-modal" class="modal">
+            <div class="modal-content glass-panel" style="max-width: 600px;">
+                <span class="close-modal" onclick="closeMatchModal()">&times;</span>
+                <h2>Eşleşen Potansiyel Müşteriler</h2>
+                <p class="subtitle" style="margin-bottom: 1.5rem; text-align: left;">Bu özelliklerinizi arayan bireysel müşteriler.</p>
+                <div id="match-list" style="display: flex; flex-direction: column; gap: 1rem;">
+                    <!-- JS ile doldurulacak -->
+                </div>
+            </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- İlan Detay Modalı (Bireysel Kullanıcılar İçin) -->
+        <div id="property-detail-modal" class="modal" style="z-index: 9985;">
+            <div class="modal-content glass-panel" style="max-width: 800px; padding: 0; overflow: hidden; background: var(--white);">
+                <span class="close-modal" onclick="closePropertyDetailModal()" style="z-index: 10; color: white; background: rgba(0,0,0,0.5); width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; border-radius: 50%; top: 1rem; right: 1rem;">&times;</span>
+                
+                <div id="detail-image-container" style="width: 100%; height: 350px; position: relative;">
+                    <img id="detail-image" src="" alt="Property" style="width: 100%; height: 100%; object-fit: cover;">
+                    <span id="detail-badge" class="badge" style="top: 1rem; left: 1rem; font-size: 1.1rem; padding: 8px 18px;"></span>
+                </div>
+                
+                <div style="padding: 2.5rem;">
+                    <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 2rem;">
+                        <div>
+                            <div id="detail-price" style="font-size: 2.2rem; font-weight: 800; color: var(--accent); margin-bottom: 0.5rem;"></div>
+                            <h2 id="detail-title" style="font-size: 1.6rem; color: var(--text-main); margin-bottom: 0.5rem;"></h2>
+                            <div style="color: var(--text-light); font-size: 1.05rem; display: flex; align-items: center; gap: 8px;">
+                                <i class="fa-solid fa-location-dot"></i> <span id="detail-location"></span>
+                            </div>
+                        </div>
+                        <button class="btn btn-primary" id="detail-contact-btn" style="width: auto; padding: 14px 28px; border-radius: 50px;">
+                            <i class="fa-solid fa-phone"></i> İletişime Geç
+                        </button>
+                    </div>
+
+                    <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; margin-bottom: 2.5rem; background: var(--secondary); border-radius: var(--border-radius-md); padding: 1.5rem;">
+                        <div style="text-align: center;">
+                            <i class="fa-solid fa-bed" style="color: var(--primary); font-size: 1.6rem; margin-bottom: 8px;"></i>
+                            <div style="font-size: 0.9rem; color: var(--text-light);">Oda Sayısı</div>
+                            <div id="detail-rooms" style="font-weight: 600; font-size: 1.2rem; color: var(--text-main);"></div>
+                        </div>
+                        <div style="text-align: center; border-left: 1px solid var(--border); border-right: 1px solid var(--border);">
+                            <i class="fa-solid fa-ruler-combined" style="color: var(--primary); font-size: 1.6rem; margin-bottom: 8px;"></i>
+                            <div style="font-size: 0.9rem; color: var(--text-light);">Net Alan</div>
+                            <div id="detail-area" style="font-weight: 600; font-size: 1.2rem; color: var(--text-main);"></div>
+                        </div>
+                        <div style="text-align: center;">
+                            <i class="fa-solid fa-building" style="color: var(--primary); font-size: 1.6rem; margin-bottom: 8px;"></i>
+                            <div style="font-size: 0.9rem; color: var(--text-light);">Bina Yaşı</div>
+                            <div id="detail-age" style="font-weight: 600; font-size: 1.2rem; color: var(--text-main);">5 Yıl</div>
+                        </div>
+                    </div>
+
+                    <div>
+                        <h3 style="margin-bottom: 1rem; color: var(--primary); font-size: 1.3rem;">İlan Açıklaması</h3>
+                        <p id="detail-desc" style="color: var(--text-light); line-height: 1.7; font-size: 1rem;"></p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Jeton Mağazası Modalı -->
+        <div id="coin-modal" class="modal">
+            <div class="modal-content glass-panel" style="max-width: 650px; text-align: center; padding: 3rem;">
+                <span class="close-modal" onclick="closeCoinModal()">&times;</span>
+                <h2 style="display:flex; justify-content:center; align-items:center; gap:8px;"><i class="fa-solid fa-store" style="color:var(--primary);"></i> Jeton Mağazası</h2>
+                <p class="subtitle" style="margin-bottom: 2rem;">Eşleştiğiniz yeni müşterilerle iletişime geçmek için hemen Jeton (Coin) paketi yükleyin.</p>
+                
+                <div class="coin-packages">
+                    <!-- Paket 1 -->
+                    <div class="coin-card">
+                        <div class="coin-icon"><i class="fa-solid fa-coins"></i></div>
+                        <h3>100 Coin</h3>
+                        <p class="coin-desc">Başlangıç Paketi</p>
+                        <div class="coin-price">150 ₺</div>
+                        <button class="btn btn-primary" style="width:100%" onclick="buyCoins(100, 150)">Satın Al</button>
+                    </div>
+                    <!-- Paket 2 -->
+                    <div class="coin-card featured">
+                        <div class="popular-badge">Popüler Seçim</div>
+                        <div class="coin-icon"><i class="fa-solid fa-sack-dollar"></i></div>
+                        <h3>200 Coin</h3>
+                        <p class="coin-desc">Pro Emlakçı</p>
+                        <div class="coin-price">250 ₺</div>
+                        <button class="btn btn-accent" style="width:100%" onclick="buyCoins(200, 250)">Ayrıcalıklı Al</button>
+                    </div>
+                    <!-- Paket 3 -->
+                    <div class="coin-card">
+                        <div class="coin-icon"><i class="fa-regular fa-gem"></i></div>
+                        <h3>300 Coin</h3>
+                        <p class="coin-desc">Ultra Ticaret</p>
+                        <div class="coin-price">350 ₺</div>
+                        <button class="btn btn-primary" style="width:100%" onclick="buyCoins(300, 350)">Satın Al</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+    </section>
+
+    <!-- Profil Tamamlama Modalı (Üye olduktan sonra çıkar) -->
+    <div id="profile-setup-modal" class="modal" style="z-index: 9990;">
+        <div class="modal-content glass-panel" style="max-width: 500px; padding: 2.5rem 3rem;">
+            <h2 style="text-align: center; margin-bottom: 0.5rem;"><i class="fa-regular fa-id-card" style="color:var(--primary);"></i> Profili Tamamlayın</h2>
+            <p class="subtitle" style="margin-bottom: 2rem; text-align: center;">Size daha iyi hizmet verebilmemiz için son birkaç detay...</p>
+            
+            <form onsubmit="event.preventDefault(); submitProfileDetails();" class="request-form" style="margin-top:0;">
+                <div class="input-row">
+                    <div class="input-group-custom" style="flex:1;">
+                        <label>İsim</label>
+                        <input type="text" id="setup-name" placeholder="Adınız" required>
+                    </div>
+                    <div class="input-group-custom" style="flex:1;">
+                        <label>Soyisim</label>
+                        <input type="text" id="setup-surname" placeholder="Soyadınız" required>
+                    </div>
+                </div>
+                <div class="input-group-custom mt-3">
+                    <label>Telefon Numarası</label>
+                    <input type="tel" id="setup-phone" placeholder="Örn: 0555 123 4567" required>
+                </div>
+                
+                <button type="submit" class="btn btn-primary mt-4" style="width: 100%;">
+                    Kaydet ve Başla <i class="fa-solid fa-arrow-right"></i>
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Kullanıcı Profili ve Favoriler Modalı -->
+    <div id="user-profile-modal" class="modal" style="z-index: 9980;">
+        <div class="modal-content glass-panel" style="max-width: 800px; padding: 2rem; max-height: 90vh; overflow-y: auto;">
+            <span class="close-modal" onclick="closeUserProfile()">&times;</span>
+            
+            <!-- Profil Üst Bilgi -->
+            <div class="profile-header" style="display: flex; gap: 1.5rem; align-items: center; padding-bottom: 1.5rem; border-bottom: 1px solid var(--border); margin-bottom: 2rem;">
+                <img id="modal-user-avatar" src="" alt="User Avatar" style="width: 80px; height: 80px; border-radius: 50%; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
+                <div>
+                    <h2 id="modal-user-fullname" style="margin-bottom: 0.2rem; display: flex; align-items: center; gap: 0.5rem;">Misafir Kullanıcı</h2>
+                    <p class="subtitle" style="margin-bottom: 0.5rem;" id="modal-user-email">misafir@emlakvitrini.com</p>
+                    <div style="font-size: 0.9rem; color: var(--text-light);"><i class="fa-solid fa-phone"></i> <span id="modal-user-phone">Belirtilmedi</span></div>
+                </div>
+            </div>
+
+            <!-- Favoriler Listesi -->
+            <h3 style="margin-bottom: 1rem;"><i class="fa-solid fa-heart" style="color: #ef4444;"></i> Favori İlanlarım (<span id="fav-count">0</span>)</h3>
+            
+            <div class="property-grid" id="favorites-grid" style="grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));">
+                <!-- Favori ilanlar buraya JS ile basılacak -->
+            </div>
+            <div id="no-favorites-msg" style="display: none; text-align: center; padding: 3rem; color: var(--text-light); background: rgba(255,255,255,0.05); border-radius: var(--border-radius-md); border: 2px dashed var(--border);">
+                <i class="fa-regular fa-heart" style="font-size: 3rem; margin-bottom: 1rem; opacity: 0.5;"></i>
+                <p>Henüz favoriye eklediğiniz bir ilan bulunmuyor.</p>
+                <button class="btn btn-text mt-2" onclick="closeUserProfile()">İlanlara Göz At</button>
+            </div>
+
+            <!-- Talepler Listesi -->
+            <h3 style="margin-top: 2.5rem; margin-bottom: 1rem;"><i class="fa-solid fa-clipboard-list" style="color: var(--primary);"></i> Oluşturduğum Talepler (<span id="req-count">0</span>)</h3>
+            
+            <div id="user-requests-list" style="display: flex; flex-direction: column; gap: 1rem;">
+                <!-- Talepler JS ile buraya basılacak -->
+            </div>
+            <div id="no-requests-msg" style="display: none; text-align: center; padding: 2rem; color: var(--text-light); background: rgba(255,255,255,0.05); border-radius: var(--border-radius-md); border: 2px dashed var(--border);">
+                <p>Henüz bir ev arama talebi oluşturmadınız.</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Global Custom Popup Modal -->
+    <div id="corp-signup-modal" class="modal" style="z-index: 9990;">
+        <div class="modal-content glass-panel" style="max-width: 850px; padding: 2.5rem 3rem;">
+            <span class="close-modal" onclick="closeCorpSignupModal()">&times;</span>
+            <h2 style="display:flex; align-items:center; gap:10px;"><i class="fa-solid fa-building-user" style="color:var(--primary);"></i> Kurumsal Üyelik Başvurusu</h2>
+            <p class="subtitle" style="margin-bottom: 2rem; text-align: left; color: var(--text-light);">Emlak ofisiniz veya şirketiniz için kurumsal profil oluşturarak ilan yayınlamaya başlayın.</p>
+            
+            <form id="corp-signup-form" onsubmit="event.preventDefault(); submitCorpSignup();" class="request-form" style="margin-top:0;">
+                <div class="form-grid">
+                    <!-- Sol Kolon: Temel Bilgiler -->
+                    <div class="form-column">
+                        <div class="form-section" style="border: none; padding-bottom: 0;">
+                            <h4><i class="fa-regular fa-id-card"></i> Yetkili Bilgileri</h4>
+                            <div class="input-row">
+                                <div class="input-group-custom" style="flex:1;">
+                                    <label>İsim</label>
+                                    <input type="text" placeholder="Adınız" required>
+                                </div>
+                                <div class="input-group-custom" style="flex:1;">
+                                    <label>Soyisim</label>
+                                    <input type="text" placeholder="Soyadınız" required>
+                                </div>
+                            </div>
+                            <div class="input-group-custom mt-3">
+                                <label>TC Kimlik Numarası</label>
+                                <input type="text" placeholder="11 Haneli TC Kimlik Numaranız" pattern="[0-9]{11}" title="Lütfen 11 haneli geçerli bir TC giriniz." required>
+                            </div>
+                            <div class="input-group-custom mt-3">
+                                <label>Giriş E-mail Adresi</label>
+                                <input type="email" placeholder="Kurumsal E-mail (@şirketiniz.com)" required>
+                            </div>
+                            <div class="input-group-custom mt-3">
+                                <label>Şifre Belirleyin</label>
+                                <input type="password" placeholder="En az 6 karakter" required minlength="6">
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Sağ Kolon: Resmî Belgeler -->
+                    <div class="form-column">
+                        <div class="form-section" style="border: none; padding-bottom: 0;">
+                            <h4><i class="fa-solid fa-folder-open"></i> Resmî Belgeler (PDF, JPG, PNG)</h4>
+                            
+                            <div class="file-upload-grid" style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-top: 1rem;">
+                                <!-- Vergi Levhası -->
+                                <div class="file-drop-area mini-drop-area" id="drop-vergi">
+                                    <i class="fa-solid fa-file-invoice-dollar" style="color: var(--primary); font-size: 1.5rem; margin-bottom: 6px;"></i>
+                                    <p>Vergi Levhası</p>
+                                    <span class="file-name" id="file-name-vergi">Dosya Seçilmedi</span>
+                                    <input type="file" required accept=".pdf, .jpg, .jpeg, .png" class="hidden-file-input" onchange="updateFileName(this, 'file-name-vergi')">
+                                </div>
+                                <!-- İmza Sirküleri -->
+                                <div class="file-drop-area mini-drop-area" id="drop-imza">
+                                    <i class="fa-solid fa-signature" style="color: var(--primary); font-size: 1.5rem; margin-bottom: 6px;"></i>
+                                    <p>İmza Sirküleri</p>
+                                    <span class="file-name" id="file-name-imza">Dosya Seçilmedi</span>
+                                    <input type="file" required accept=".pdf, .jpg, .jpeg, .png" class="hidden-file-input" onchange="updateFileName(this, 'file-name-imza')">
+                                </div>
+                                <!-- Oda Kaydı -->
+                                <div class="file-drop-area mini-drop-area" id="drop-oda">
+                                    <i class="fa-solid fa-building-columns" style="color: var(--primary); font-size: 1.5rem; margin-bottom: 6px;"></i>
+                                    <p>Oda Kaydı</p>
+                                    <span class="file-name" id="file-name-oda">Dosya Seçilmedi</span>
+                                    <input type="file" required accept=".pdf, .jpg, .jpeg, .png" class="hidden-file-input" onchange="updateFileName(this, 'file-name-oda')">
+                                </div>
+                                <!-- Ticari Taşınmaz Belgesi -->
+                                <div class="file-drop-area mini-drop-area" id="drop-tasinmaz">
+                                    <i class="fa-solid fa-file-contract" style="color: var(--primary); font-size: 1.5rem; margin-bottom: 6px;"></i>
+                                    <p>Tis. Taşn. Belgesi</p>
+                                    <span class="file-name" id="file-name-tasinmaz">Dosya Seçilmedi</span>
+                                    <input type="file" required accept=".pdf, .jpg, .jpeg, .png" class="hidden-file-input" onchange="updateFileName(this, 'file-name-tasinmaz')">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div style="text-align: right; margin-top: 2rem; padding-top: 1.5rem; border-top: 1px solid var(--border); display: flex; justify-content: flex-end; align-items: center; gap: 1rem;">
+                    <button type="button" class="btn btn-text" onclick="closeCorpSignupModal()" style="width: auto;">İptal</button>
+                    <button type="submit" class="btn btn-primary" style="width: auto; min-width: 200px;">
+                        <i class="fa-solid fa-paper-plane"></i> Başvuruyu Gönder
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Global Custom Popup Modal -->
+    <div id="custom-popup" class="modal" style="z-index: 9999;">
+        <div class="modal-content glass-panel" style="max-width: 420px; text-align: center; padding: 2.5rem 2rem;">
+            <div id="popup-icon" style="font-size: 3.5rem; margin-bottom: 1rem;"></div>
+            <h3 id="popup-title" style="margin-bottom: 1rem; color: var(--text-main); font-size: 1.4rem;"></h3>
+            <p id="popup-message" class="subtitle" style="margin-bottom: 2rem; color: var(--text-light);"></p>
+            <div id="popup-buttons" style="display: flex; gap: 1rem; justify-content: center;">
+                <!-- JS dinamik yaratır -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Main Logic using ES Module -->
+    <script type="module" src="js/app.js"></script>
+</body>
+</html>
