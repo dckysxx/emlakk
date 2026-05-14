@@ -68,7 +68,6 @@ function formatListingPrice(listing) {
     : `${n.toLocaleString('tr-TR')} ₺`;
 }
 
-// ─── Detaylı filtre alanlarını temizle (temel filtreler korunur) ──────────────
 const CLEAR_DETAILED = {
   minPrice: '', maxPrice: '',
   minM2: '', maxM2: '',
@@ -85,6 +84,7 @@ export default function HomePage() {
   const [userType,      setUserType]      = useState(null);
   const [isGuest,       setIsGuest]       = useState(false);
   const [pendingAction, setPendingAction] = useState(null);
+  const [loginMode,     setLoginMode]     = useState('individual');
 
   // ── Modal state ────────────────────────────────────────────────────────────
   const [showLoginModal,   setShowLoginModal]   = useState(false);
@@ -113,44 +113,59 @@ export default function HomePage() {
       setPendingAction(null);
     }
   };
+
   const handleLoginCorporate = () => {
     setIsLoggedIn(true); setUserType('corporate'); setIsGuest(false);
     setShowLoginModal(false); setPendingAction(null);
     router.push('/corporate');
   };
+
   const handleGuestLogin = () => {
     setIsLoggedIn(true); setUserType('individual'); setIsGuest(true);
     setShowLoginModal(false); setPendingAction(null);
   };
+
   const handleLogout = () => {
     setIsLoggedIn(false); setUserType(null); setIsGuest(false); setPendingAction(null);
   };
+
   const handleCloseLogin = () => { setShowLoginModal(false); setPendingAction(null); };
+
+  // ── Giriş butonu handler'ları ──────────────────────────────────────────────
+  const openIndividualLogin = () => { setLoginMode('individual'); setShowLoginModal(true); };
+  const openCorporateLogin  = () => { setLoginMode('corporate');  setShowLoginModal(true); };
 
   // ── Özel Talep erişim kontrolü ─────────────────────────────────────────────
   const handleOpenRequest = () => {
     if (!isLoggedIn) {
-      setPendingAction('openRequestForm'); setShowLoginModal(true); return;
+      setPendingAction('openRequestForm');
+      setLoginMode('individual');
+      setShowLoginModal(true);
+      return;
     }
     if (isGuest) {
       showWarning('Özel talep formu sadece bireysel üyelere özeldir. Lütfen üye girişi yapın.');
-      setPendingAction('openRequestForm'); setShowLoginModal(true); return;
+      setPendingAction('openRequestForm');
+      setLoginMode('individual');
+      setShowLoginModal(true);
+      return;
     }
     if (userType === 'corporate') {
-      showWarning('Özel talep formu sadece bireysel kullanıcılar içindir.'); return;
+      showWarning('Özel talep formu sadece bireysel kullanıcılar içindir.');
+      return;
     }
     setShowRequestModal(true);
   };
 
   // ── Favori toggle ──────────────────────────────────────────────────────────
   const toggleFavorite = (id) => {
-    if (!isLoggedIn || isGuest) { setShowLoginModal(true); return; }
+    if (!isLoggedIn || isGuest) { setLoginMode('individual'); setShowLoginModal(true); return; }
     setFavorites(prev =>
       prev.includes(id) ? prev.filter(f => f !== id) : [...prev, id]
     );
   };
 
-  // ── Filtre güncelle ────────────────────────────────────────────────────────
+  // ── Filtre handler'ları ────────────────────────────────────────────────────
   const handleFilterChange = (key, value) => {
     setFilters(prev => ({ ...prev, [key]: value }));
   };
@@ -164,18 +179,14 @@ export default function HomePage() {
     });
   };
 
-  const handleClearAll = () => setFilters(EMPTY_FILTERS);
-
-  const handleClearDetailed = () =>
-    setFilters(prev => ({ ...prev, ...CLEAR_DETAILED }));
+  const handleClearAll      = () => setFilters(EMPTY_FILTERS);
+  const handleClearDetailed = () => setFilters(prev => ({ ...prev, ...CLEAR_DETAILED }));
 
   // ── Filtrelenmiş ilanlar ───────────────────────────────────────────────────
   const displayListings = useMemo(
     () => filterListings(MOCK_LISTINGS, filters),
     [filters]
   );
-
-  const activeFilterCount = useMemo(() => countActiveFilters(filters), [filters]);
 
   return (
     <div className="min-h-screen" style={{ background: '#F5F7FA' }}>
@@ -185,6 +196,7 @@ export default function HomePage() {
         className="px-6 py-4 flex items-center justify-between sticky top-0 z-40"
         style={{ background: '#0D1B2A', boxShadow: '0 2px 16px rgba(13,27,42,0.25)' }}
       >
+        {/* Logo */}
         <div className="flex items-center gap-2">
           <span className="text-xl font-extrabold tracking-tight">
             <span className="text-white">Ev Sor </span>
@@ -198,15 +210,35 @@ export default function HomePage() {
           </span>
         </div>
 
-        <div className="flex items-center gap-3">
+        {/* Sağ alan */}
+        <div className="flex items-center gap-2">
           {!isLoggedIn ? (
-            <button
-              onClick={() => setShowLoginModal(true)}
-              className="px-5 py-2 rounded-xl text-sm font-bold text-white transition hover:opacity-90"
-              style={{ background: 'linear-gradient(90deg,#2F80ED,#1a6fd4)', boxShadow: '0 2px 10px rgba(47,128,237,0.35)' }}
-            >
-              Giriş Yap
-            </button>
+            <>
+              {/* Desktop: iki ayrı buton */}
+              <button
+                onClick={openIndividualLogin}
+                className="hidden sm:block px-4 py-2 rounded-xl text-sm font-bold text-white transition hover:opacity-90 active:scale-95"
+                style={{ background: 'linear-gradient(90deg,#2F80ED,#1a6fd4)', boxShadow: '0 2px 10px rgba(47,128,237,0.3)' }}
+              >
+                Kullanıcı Girişi
+              </button>
+              <button
+                onClick={openCorporateLogin}
+                className="hidden sm:block px-4 py-2 rounded-xl text-sm font-bold text-white transition hover:opacity-90 active:scale-95"
+                style={{ background: 'linear-gradient(90deg,#10B981,#059669)', boxShadow: '0 2px 10px rgba(16,185,129,0.3)' }}
+              >
+                Kurumsal Giriş
+              </button>
+
+              {/* Mobil: tek buton */}
+              <button
+                onClick={openIndividualLogin}
+                className="sm:hidden px-4 py-2 rounded-xl text-sm font-bold text-white transition hover:opacity-90"
+                style={{ background: 'linear-gradient(90deg,#2F80ED,#1a6fd4)' }}
+              >
+                Giriş Yap
+              </button>
+            </>
           ) : (
             <>
               {isGuest && (
@@ -226,9 +258,11 @@ export default function HomePage() {
                   <span className="text-white text-sm font-medium hidden sm:block">Ali Yılmaz</span>
                 </button>
               )}
-              <button onClick={handleLogout}
+              <button
+                onClick={handleLogout}
                 className="px-3 py-1.5 rounded-xl text-xs font-medium transition hover:opacity-80"
-                style={{ background: 'rgba(255,255,255,0.07)', color: '#94a3b8', border: '1px solid rgba(255,255,255,0.1)' }}>
+                style={{ background: 'rgba(255,255,255,0.07)', color: '#94a3b8', border: '1px solid rgba(255,255,255,0.1)' }}
+              >
                 Çıkış
               </button>
             </>
@@ -247,7 +281,7 @@ export default function HomePage() {
           </div>
         )}
 
-        {/* Hero: Özel Talep + Filtreler */}
+        {/* Hero */}
         <RequestAndFilterHero
           onOpenRequest={handleOpenRequest}
           filters={filters}
@@ -265,9 +299,7 @@ export default function HomePage() {
         {/* İlanlar başlık */}
         <div className="flex items-center justify-between mb-5">
           <div>
-            <h3 className="text-lg font-bold" style={{ color: '#0D1B2A' }}>
-              Öne Çıkan İlanlar
-            </h3>
+            <h3 className="text-lg font-bold" style={{ color: '#0D1B2A' }}>Öne Çıkan İlanlar</h3>
             <p className="text-xs mt-0.5" style={{ color: '#6B7280' }}>
               Tekirdağ &amp; Çorlu bölgesindeki güncel ilanlar
             </p>
@@ -319,6 +351,7 @@ export default function HomePage() {
           onLoginIndividual={handleLoginIndividual}
           onLoginCorporate={handleLoginCorporate}
           onGuestLogin={handleGuestLogin}
+          initialMode={loginMode}
         />
       )}
       {showRequestModal && <RequestModal onClose={() => setShowRequestModal(false)} />}

@@ -1,26 +1,22 @@
-// ─── Para string → sayı ───────────────────────────────────────────────────────
 function parseMoney(str) {
   if (!str && str !== 0) return null;
   const n = Number(String(str).replace(/\./g, '').replace(',', '.').replace(/[^\d.]/g, ''));
   return isNaN(n) ? null : n;
 }
 
-/**
- * Ana filtreleme fonksiyonu.
- * Supabase'e geçildiğinde bu fonksiyon query builder'a dönüştürülecek.
- */
 export function filterListings(listings, filters) {
   return listings.filter(listing => {
 
     // 1. İlan türü
     if (filters.listingType && listing.type !== filters.listingType) return false;
 
-    // 2. Mahalle (çoklu seçim)
+    // 2. Mahalle
     if (filters.neighborhoods?.length > 0) {
-      if (!filters.neighborhoods.includes(listing.location || listing.neighborhood)) return false;
+      const loc = listing.neighborhood || listing.location;
+      if (!filters.neighborhoods.includes(loc)) return false;
     }
 
-    // 3. Fiyat aralığı
+    // 3. Fiyat
     const rawPrice = parseMoney(listing.price);
     if (rawPrice !== null) {
       const minP = parseMoney(filters.minPrice);
@@ -29,7 +25,7 @@ export function filterListings(listings, filters) {
       if (maxP !== null && rawPrice > maxP) return false;
     }
 
-    // 4. Oda sayısı (çoklu seçim)
+    // 4. Oda sayısı
     if (filters.rooms?.length > 0) {
       if (!filters.rooms.includes(listing.rooms)) return false;
     }
@@ -58,30 +54,27 @@ export function filterListings(listings, filters) {
     // 7. Ek özellikler
     if (filters.features?.length > 0) {
       const listingFeatures = listing.features || [];
-      const hasAll = filters.features.every(f => listingFeatures.includes(f));
-      if (!hasAll) return false;
+      if (!filters.features.every(f => listingFeatures.includes(f))) return false;
     }
 
     return true;
   });
 }
 
-// ─── Aktif filtre count (badge için) ─────────────────────────────────────────
 export function countActiveFilters(filters) {
   let count = 0;
-  if (filters.listingType)          count++;
+  if (filters.listingType)           count++;
   if (filters.neighborhoods?.length) count += filters.neighborhoods.length;
-  if (filters.minPrice)             count++;
-  if (filters.maxPrice)             count++;
-  if (filters.rooms?.length)        count += filters.rooms.length;
-  if (filters.minM2)                count++;
-  if (filters.maxM2)                count++;
-  if (filters.buildingAge)          count++;
-  if (filters.features?.length)     count += filters.features.length;
+  if (filters.minPrice)              count++;
+  if (filters.maxPrice)              count++;
+  if (filters.rooms?.length)         count += filters.rooms.length;
+  if (filters.minM2)                 count++;
+  if (filters.maxM2)                 count++;
+  if (filters.buildingAge)           count++;
+  if (filters.features?.length)      count += filters.features.length;
   return count;
 }
 
-// ─── Boş filtre state ─────────────────────────────────────────────────────────
 export const EMPTY_FILTERS = {
   listingType:   '',
   neighborhoods: [],

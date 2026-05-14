@@ -5,7 +5,6 @@ import DetailedFilterDrawer from './DetailedFilterDrawer';
 const TYPE_OPTIONS = ['Tümü', 'Satılık', 'Kiralık'];
 const ROOM_OPTIONS = ['Tümü', '1+0', '1+1', '2+1', '3+1', '4+1'];
 
-// ─── Dışarıda tanımlanan chip (remount önlenir) ───────────────────────────────
 function FilterChip({ label, active, onClick }) {
   return (
     <button
@@ -25,7 +24,6 @@ function FilterChip({ label, active, onClick }) {
 export default function RequestAndFilterHero({ onOpenRequest, filters, onFilterChange, onClearDetailed }) {
   const [drawerOpen, setDrawerOpen] = useState(false);
 
-  // Detaylı filtre sayısı (badge için)
   const detailedCount = [
     filters.minPrice, filters.maxPrice,
     filters.minM2, filters.maxM2,
@@ -46,7 +44,7 @@ export default function RequestAndFilterHero({ onOpenRequest, filters, onFilterC
     );
   };
 
-  const activeType = filters.listingType || 'Tümü';
+  const activeType  = filters.listingType || 'Tümü';
   const activeRooms = filters.rooms || [];
 
   return (
@@ -58,9 +56,8 @@ export default function RequestAndFilterHero({ onOpenRequest, filters, onFilterC
           boxShadow: '0 8px 40px rgba(13,27,42,0.2)',
         }}
       >
-        {/* ── CTA Bölümü ── */}
+        {/* CTA */}
         <div className="px-6 sm:px-10 pt-8 pb-6 text-center">
-          {/* Badge */}
           <div
             className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full text-xs font-semibold mb-4"
             style={{ background: 'rgba(47,128,237,0.18)', color: '#7ec8ff', border: '1px solid rgba(47,128,237,0.3)' }}
@@ -89,12 +86,11 @@ export default function RequestAndFilterHero({ onOpenRequest, filters, onFilterC
           </button>
         </div>
 
-        {/* ── Ayırıcı ── */}
+        {/* Ayırıcı */}
         <div style={{ height: '1px', background: 'rgba(255,255,255,0.08)', margin: '0 24px' }} />
 
-        {/* ── Filtre Bölümü ── */}
+        {/* Filtreler */}
         <div className="px-6 sm:px-10 py-5">
-          {/* Başlık + Detaylı Filtreleme butonu */}
           <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
             <p className="text-xs font-semibold uppercase tracking-widest" style={{ color: '#64748b' }}>
               İlanları Filtrele
@@ -121,19 +117,13 @@ export default function RequestAndFilterHero({ onOpenRequest, filters, onFilterC
             </button>
           </div>
 
-          {/* Temel filtreler */}
           <div className="flex flex-col sm:flex-row gap-5">
             {/* Tür */}
             <div className="flex-1">
               <p className="text-xs font-medium mb-2" style={{ color: '#94a3b8' }}>Tür</p>
               <div className="flex gap-2 flex-wrap">
                 {TYPE_OPTIONS.map(opt => (
-                  <FilterChip
-                    key={opt}
-                    label={opt}
-                    active={activeType === opt}
-                    onClick={() => updateType(opt)}
-                  />
+                  <FilterChip key={opt} label={opt} active={activeType === opt} onClick={() => updateType(opt)} />
                 ))}
               </div>
             </div>
@@ -142,24 +132,16 @@ export default function RequestAndFilterHero({ onOpenRequest, filters, onFilterC
             <div className="flex-1">
               <div className="flex items-center gap-1.5 mb-2">
                 <p className="text-xs font-medium" style={{ color: '#94a3b8' }}>📍 Konum</p>
-                <span
-                  className="text-xs px-2 py-0.5 rounded-full font-medium"
-                  style={{ background: 'rgba(255,255,255,0.08)', color: '#64748b' }}
-                >
+                <span className="text-xs px-2 py-0.5 rounded-full font-medium"
+                  style={{ background: 'rgba(255,255,255,0.08)', color: '#64748b' }}>
                   Kilitli
                 </span>
               </div>
               <div className="flex gap-2 flex-wrap">
                 {['Tekirdağ', 'Çorlu'].map(opt => (
-                  <div
-                    key={opt}
+                  <div key={opt}
                     className="px-4 py-1.5 rounded-lg text-xs font-semibold cursor-not-allowed select-none"
-                    style={{
-                      background: 'rgba(255,255,255,0.06)',
-                      color: '#64748b',
-                      border: '1px solid rgba(255,255,255,0.08)',
-                    }}
-                  >
+                    style={{ background: 'rgba(255,255,255,0.06)', color: '#64748b', border: '1px solid rgba(255,255,255,0.08)' }}>
                     🔒 {opt}
                   </div>
                 ))}
@@ -184,7 +166,6 @@ export default function RequestAndFilterHero({ onOpenRequest, filters, onFilterC
         </div>
       </div>
 
-      {/* Detaylı Filtre Drawer */}
       <DetailedFilterDrawer
         open={drawerOpen}
         onClose={() => setDrawerOpen(false)}

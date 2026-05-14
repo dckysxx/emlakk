@@ -1,23 +1,11 @@
 'use client';
 
-const TAG_LABELS = {
-  listingType:  v => v,
-  minPrice:     v => `Min ₺${Number(v).toLocaleString('tr-TR')}`,
-  maxPrice:     v => `Max ₺${Number(v).toLocaleString('tr-TR')}`,
-  minM2:        v => `Min ${v} m²`,
-  maxM2:        v => `Max ${v} m²`,
-  buildingAge:  v => `Bina: ${v} yıl`,
-  neighborhoods:v => v,
-  rooms:        v => v,
-  features:     v => v,
-};
-
 export default function ActiveFilterTags({ filters, onRemove, onClearAll }) {
   const tags = [];
 
-  if (filters.listingType) {
+  if (filters.listingType)
     tags.push({ key: 'listingType', value: filters.listingType, label: filters.listingType });
-  }
+
   filters.neighborhoods?.forEach(n =>
     tags.push({ key: 'neighborhoods', value: n, label: `📍 ${n}` })
   );
@@ -25,6 +13,7 @@ export default function ActiveFilterTags({ filters, onRemove, onClearAll }) {
     tags.push({ key: 'minPrice', value: filters.minPrice, label: `Min ₺${Number(filters.minPrice).toLocaleString('tr-TR')}` });
   if (filters.maxPrice)
     tags.push({ key: 'maxPrice', value: filters.maxPrice, label: `Max ₺${Number(filters.maxPrice).toLocaleString('tr-TR')}` });
+
   filters.rooms?.forEach(r =>
     tags.push({ key: 'rooms', value: r, label: `🛏 ${r}` })
   );
@@ -34,6 +23,7 @@ export default function ActiveFilterTags({ filters, onRemove, onClearAll }) {
     tags.push({ key: 'maxM2', value: filters.maxM2, label: `Max ${filters.maxM2} m²` });
   if (filters.buildingAge)
     tags.push({ key: 'buildingAge', value: filters.buildingAge, label: `🏗 ${filters.buildingAge} yıl` });
+
   filters.features?.forEach(f =>
     tags.push({ key: 'features', value: f, label: `✓ ${f}` })
   );
@@ -53,6 +43,7 @@ export default function ActiveFilterTags({ filters, onRemove, onClearAll }) {
         >
           {tag.label}
           <button
+            type="button"
             onClick={() => onRemove(tag.key, tag.value)}
             className="hover:opacity-60 transition font-bold text-sm leading-none"
             style={{ color: '#2F80ED' }}
@@ -62,6 +53,7 @@ export default function ActiveFilterTags({ filters, onRemove, onClearAll }) {
         </span>
       ))}
       <button
+        type="button"
         onClick={onClearAll}
         className="px-3 py-1.5 rounded-full text-xs font-semibold transition hover:opacity-80"
         style={{ background: '#FEE2E2', color: '#EF4444', border: '1px solid #FECACA' }}

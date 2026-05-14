@@ -11,8 +11,6 @@ const MAHALLELER = [
 const BINA_YASI = ['0-5','5-10','10-20','20+'];
 const FEATURES  = ['Balkon','Asansör','Otopark','Eşyalı','Site içinde','Güvenlik','Havuz'];
 
-// ─── Dışarıda tanımlanan alt componentler (focus/remount sorunu önlenir) ──────
-
 function DrawerSection({ title, children }) {
   return (
     <div className="pb-5" style={{ borderBottom: '1px solid #F1F5F9' }}>
@@ -60,18 +58,14 @@ function NumInput({ placeholder, value, onChange, suffix }) {
         onBlur={e => (e.target.style.border = '1.5px solid #E5E7EB')}
       />
       {suffix && (
-        <span
-          className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-medium"
-          style={{ color: '#9CA3AF' }}
-        >
+        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-medium"
+          style={{ color: '#9CA3AF' }}>
           {suffix}
         </span>
       )}
     </div>
   );
 }
-
-// ─── Ana Drawer ───────────────────────────────────────────────────────────────
 
 export default function DetailedFilterDrawer({ open, onClose, filters, onChange, onApply, onClearDetailed }) {
   if (!open) return null;
@@ -93,7 +87,7 @@ export default function DetailedFilterDrawer({ open, onClose, filters, onChange,
         onClick={onClose}
       />
 
-      {/* Drawer panel — sağdan gelir */}
+      {/* Drawer */}
       <div
         className="fixed top-0 right-0 h-full z-50 flex flex-col"
         style={{
@@ -110,57 +104,36 @@ export default function DetailedFilterDrawer({ open, onClose, filters, onChange,
         >
           <h2 className="text-sm font-bold text-white">🔍 Detaylı Filtreleme</h2>
           <button
+            type="button"
             onClick={onClose}
             className="w-8 h-8 flex items-center justify-center rounded-full transition hover:opacity-70"
             style={{ background: 'rgba(255,255,255,0.1)', color: '#fff', fontSize: '18px' }}
           >×</button>
         </div>
 
-        {/* İçerik — scroll */}
+        {/* İçerik */}
         <div className="flex-1 overflow-y-auto px-6 py-5 flex flex-col gap-5">
 
-          {/* Fiyat Aralığı */}
           <DrawerSection title="Fiyat Aralığı (₺)">
             <div className="flex flex-col gap-2">
-              <NumInput
-                placeholder="Min fiyat"
-                value={filters.minPrice || ''}
-                onChange={v => onChange('minPrice', v)}
-              />
-              <NumInput
-                placeholder="Max fiyat"
-                value={filters.maxPrice || ''}
-                onChange={v => onChange('maxPrice', v)}
-              />
+              <NumInput placeholder="Min fiyat" value={filters.minPrice || ''} onChange={v => onChange('minPrice', v)} />
+              <NumInput placeholder="Max fiyat" value={filters.maxPrice || ''} onChange={v => onChange('maxPrice', v)} />
               {filters.minPrice && filters.maxPrice && (
                 <p className="text-xs font-medium px-3 py-2 rounded-lg"
                   style={{ background: '#EFF6FF', color: '#2F80ED' }}>
-                  ₺{Number(filters.minPrice).toLocaleString('tr-TR')} –
-                  ₺{Number(filters.maxPrice).toLocaleString('tr-TR')}
+                  ₺{Number(filters.minPrice).toLocaleString('tr-TR')} – ₺{Number(filters.maxPrice).toLocaleString('tr-TR')}
                 </p>
               )}
             </div>
           </DrawerSection>
 
-          {/* Metrekare */}
           <DrawerSection title="Metrekare (m²)">
             <div className="grid grid-cols-2 gap-2">
-              <NumInput
-                placeholder="Min"
-                value={filters.minM2 || ''}
-                onChange={v => onChange('minM2', v)}
-                suffix="m²"
-              />
-              <NumInput
-                placeholder="Max"
-                value={filters.maxM2 || ''}
-                onChange={v => onChange('maxM2', v)}
-                suffix="m²"
-              />
+              <NumInput placeholder="Min" value={filters.minM2 || ''} onChange={v => onChange('minM2', v)} suffix="m²" />
+              <NumInput placeholder="Max" value={filters.maxM2 || ''} onChange={v => onChange('maxM2', v)} suffix="m²" />
             </div>
           </DrawerSection>
 
-          {/* Bina Yaşı */}
           <DrawerSection title="Bina Yaşı">
             <div className="flex flex-wrap gap-2">
               {BINA_YASI.map(opt => (
@@ -174,12 +147,8 @@ export default function DetailedFilterDrawer({ open, onClose, filters, onChange,
             </div>
           </DrawerSection>
 
-          {/* Mahalle */}
           <DrawerSection title="Mahalle (Çoklu Seçim)">
-            <div
-              className="flex flex-col gap-1 max-h-48 overflow-y-auto pr-1"
-              style={{ scrollbarWidth: 'thin' }}
-            >
+            <div className="flex flex-col gap-1 max-h-48 overflow-y-auto pr-1" style={{ scrollbarWidth: 'thin' }}>
               {MAHALLELER.map(m => (
                 <label key={m} className="flex items-center gap-2.5 cursor-pointer py-1">
                   <input
@@ -199,7 +168,6 @@ export default function DetailedFilterDrawer({ open, onClose, filters, onChange,
             )}
           </DrawerSection>
 
-          {/* Ek Özellikler */}
           <DrawerSection title="Ek Özellikler">
             <div className="flex flex-wrap gap-2">
               {FEATURES.map(f => (
@@ -215,7 +183,7 @@ export default function DetailedFilterDrawer({ open, onClose, filters, onChange,
 
         </div>
 
-        {/* Footer butonları */}
+        {/* Footer */}
         <div
           className="flex gap-3 px-6 py-4 flex-shrink-0"
           style={{ borderTop: '1px solid #E5E7EB', background: '#fff' }}
@@ -231,7 +199,7 @@ export default function DetailedFilterDrawer({ open, onClose, filters, onChange,
           <button
             type="button"
             onClick={() => { onApply(); onClose(); }}
-            className="flex-2 py-3 px-6 rounded-xl text-white text-sm font-bold transition hover:opacity-90 active:scale-95"
+            className="py-3 px-6 rounded-xl text-white text-sm font-bold transition hover:opacity-90 active:scale-95"
             style={{
               flex: 2,
               background: 'linear-gradient(90deg,#2F80ED,#1a6fd4)',
