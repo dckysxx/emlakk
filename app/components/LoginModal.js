@@ -2,6 +2,7 @@
 import { useState } from 'react';
 import { Eye, EyeOff } from 'lucide-react';
 import CorporateApplicationModal from './CorporateApplicationModal';
+import { signUpIndividual } from '../../lib/auth';
 
 function isValidTurkishPhone(phone) {
   return /^05\d{9}$/.test(phone.replace(/\s/g, ''));
@@ -60,6 +61,10 @@ export default function LoginModal({
   const [registerSuccess, setRegisterSuccess] = useState(false);
   const [showAppModal,    setShowAppModal]    = useState(false);
 
+  // Gerçek auth durumu
+  const [loading,    setLoading]    = useState(false);
+  const [authError,  setAuthError]  = useState('');
+
   const [login, setLogin] = useState({ email: '', password: '' });
   const [reg,   setReg]   = useState({
     firstName: '', lastName: '', phone: '',
@@ -67,15 +72,20 @@ export default function LoginModal({
   });
   const [regErrors, setRegErrors] = useState({});
 
-  const updateLogin = (k, v) => setLogin(p => ({ ...p, [k]: v }));
-  const updateReg   = (k, v) => {
+  const updateLogin = (k, v) => {
+    setLogin(p => ({ ...p, [k]: v }));
+    if (authError) setAuthError('');
+  };
+  const updateReg = (k, v) => {
     setReg(p => ({ ...p, [k]: v }));
     if (regErrors[k]) setRegErrors(p => ({ ...p, [k]: '' }));
+    if (authError) setAuthError('');
   };
 
   const headerAccent = initialMode === 'corporate' ? '#10B981' : '#2F80ED';
   const modeLabel    = initialMode === 'corporate' ? '🏢 Kurumsal' : '🏠 Bireysel';
 
+  // ── Kayıt validasyonu ──────────────────────────────────────────────────────
   const validateReg = () => {
     const e = {};
     if (!reg.firstName.trim())         e.firstName = 'Ad zorunludur.';
@@ -86,21 +96,63 @@ export default function LoginModal({
     if (!reg.email.trim())             e.email     = 'E-posta zorunludur.';
     else if (!isValidEmail(reg.email)) e.email     = 'Geçerli bir e-posta girin.';
     if (!reg.password)                 e.password  = 'Şifre zorunludur.';
+    else if (reg.password.length < 6)  e.password  = 'Şifre en az 6 karakter olmalıdır.';
     if (!reg.password2)                e.password2 = 'Şifre tekrar zorunludur.';
     else if (reg.password !== reg.password2)
                                        e.password2 = 'Şifreler eşleşmiyor.';
     return e;
   };
 
-  const handleRegister = () => {
+  // ── Kayıt — gerçek Supabase ──────────────────────────────────────────────────
+  const handleRegister = async () => {
     const e = validateReg();
     if (Object.keys(e).length > 0) { setRegErrors(e); return; }
+
+    setLoading(true);
+    setAuthError('');
+    const res = await signUpIndividual({
+      firstName: reg.firstName,
+      lastName:  reg.lastName,
+      phone:     reg.phone,
+      email:     reg.email,
+      password:  reg.password,
+    });
+    setLoading(false);
+
+    if (!res.ok) { setAuthError(res.error); return; }
+
     setRegisterSuccess(true);
     setTimeout(() => {
       setRegisterSuccess(false);
       setAuthView('login');
       setReg({ firstName:'', lastName:'', phone:'', email:'', password:'', password2:'' });
     }, 2500);
+  };
+
+  // ── Bireysel giriş ───────────────────────────────────────────────────────────
+  const handleIndividualSubmit = async () => {
+    if (!login.email.trim() || !login.password.trim()) {
+      setAuthError('E-posta ve şifre zorunludur.');
+      return;
+    }
+    setLoading(true);
+    setAuthError('');
+    const res = await onLoginIndividual(login.email, login.password);
+    setLoading(false);
+    if (res && !res.ok) setAuthError(res.error);
+  };
+
+  // ── Kurumsal giriş ─────────────────────────────────────────────────────────
+  const handleCorporateSubmit = async () => {
+    if (!login.email.trim() || !login.password.trim()) {
+      setAuthError('E-posta ve şifre zorunludur.');
+      return;
+    }
+    setLoading(true);
+    setAuthError('');
+    const res = await onLoginCorporate(login.email, login.password);
+    setLoading(false);
+    if (res && !res.ok) setAuthError(res.error);
   };
 
   return (
@@ -147,6 +199,14 @@ export default function LoginModal({
           <p className="text-xs text-center mb-4" style={{ color: '#6B7280' }}>
             Tekirdağ &amp; Çorlu'nun güvenilir emlak platformu
           </p>
+
+          {/* Auth hata mesajı */}
+          {authError && (
+            <div className="mb-4 px-4 py-3 rounded-xl text-xs font-semibold"
+              style={{ background: '#FEE2E2', color: '#991B1B', border: '1px solid #FECACA' }}>
+              ⚠️ {authError}
+            </div>
+          )}
 
           {/* ── REGISTER (sadece individual) ── */}
           {authView === 'register' && initialMode === 'individual' && (
@@ -217,7 +277,7 @@ export default function LoginModal({
                     Şifre <span style={{ color: '#EF4444' }}>*</span>
                   </label>
                   <div className="relative">
-                    <input type={showPw ? 'text' : 'password'} placeholder="••••••••" value={reg.password}
+                    <input type={showPw ? 'text' : 'password'} placeholder="En az 6 karakter" value={reg.password}
                       onChange={e => updateReg('password', e.target.value)}
                       style={{ ...getInputStyle(regErrors.password), paddingRight: '36px' }}
                       onFocus={e => (e.target.style.border = '1.5px solid #2F80ED')}
@@ -248,15 +308,19 @@ export default function LoginModal({
                   {regErrors.password2 && <p className="text-xs mt-1" style={{ color: '#EF4444' }}>{regErrors.password2}</p>}
                 </div>
 
-                <button type="button" onClick={handleRegister}
+                <button type="button" onClick={handleRegister} disabled={loading}
                   className="w-full py-3 rounded-xl text-white font-bold text-sm transition hover:opacity-90 active:scale-95 mt-1"
-                  style={{ background: 'linear-gradient(90deg,#2F80ED,#1a6fd4)', boxShadow: '0 4px 16px rgba(47,128,237,0.35)' }}>
-                  Üyelik Oluştur
+                  style={{
+                    background: loading ? '#94a3b8' : 'linear-gradient(90deg,#2F80ED,#1a6fd4)',
+                    boxShadow: loading ? 'none' : '0 4px 16px rgba(47,128,237,0.35)',
+                    cursor: loading ? 'not-allowed' : 'pointer',
+                  }}>
+                  {loading ? 'Oluşturuluyor...' : 'Üyelik Oluştur'}
                 </button>
 
                 <p className="text-center text-xs pt-2" style={{ color: '#6B7280' }}>
                   Zaten hesabınız var mı?{' '}
-                  <button type="button" onClick={() => setAuthView('login')}
+                  <button type="button" onClick={() => { setAuthView('login'); setAuthError(''); }}
                     className="font-semibold hover:underline" style={{ color: '#2F80ED' }}>
                     Giriş Yap
                   </button>
@@ -307,10 +371,14 @@ export default function LoginModal({
                     </button>
                   </div>
 
-                  <button type="button" onClick={() => onLoginIndividual()}
+                  <button type="button" onClick={handleIndividualSubmit} disabled={loading}
                     className="w-full py-3 rounded-xl text-white font-bold text-sm transition hover:opacity-90 active:scale-95 mb-4"
-                    style={{ background: 'linear-gradient(90deg,#2F80ED,#1a6fd4)', boxShadow: '0 4px 16px rgba(47,128,237,0.35)' }}>
-                    Giriş Yap
+                    style={{
+                      background: loading ? '#94a3b8' : 'linear-gradient(90deg,#2F80ED,#1a6fd4)',
+                      boxShadow: loading ? 'none' : '0 4px 16px rgba(47,128,237,0.35)',
+                      cursor: loading ? 'not-allowed' : 'pointer',
+                    }}>
+                    {loading ? 'Giriş yapılıyor...' : 'Giriş Yap'}
                   </button>
 
                   <div className="flex items-center gap-3 mb-3">
@@ -320,8 +388,10 @@ export default function LoginModal({
                   </div>
 
                   <div className="flex flex-col gap-2 mb-4">
-                    <SocialButton icon={<GoogleIcon />} label="Google ile devam et" onClick={() => onLoginIndividual()} />
-                    <SocialButton icon={<AppleIcon />}  label="Apple ile devam et"  onClick={() => onLoginIndividual()} />
+                    <SocialButton icon={<GoogleIcon />} label="Google ile devam et"
+                      onClick={() => setAuthError('Google girişi yakında aktif olacak.')} />
+                    <SocialButton icon={<AppleIcon />}  label="Apple ile devam et"
+                      onClick={() => setAuthError('Apple girişi yakında aktif olacak.')} />
                   </div>
 
                   <div className="flex items-center justify-between pt-3" style={{ borderTop: '1px solid #F3F4F6' }}>
@@ -329,7 +399,7 @@ export default function LoginModal({
                       className="text-sm font-medium hover:underline" style={{ color: '#6B7280' }}>
                       👤 Misafir Girişi
                     </button>
-                    <button type="button" onClick={() => setAuthView('register')}
+                    <button type="button" onClick={() => { setAuthView('register'); setAuthError(''); }}
                       className="text-sm font-semibold hover:underline" style={{ color: '#2F80ED' }}>
                       Üye Ol →
                     </button>
@@ -368,10 +438,14 @@ export default function LoginModal({
                     </div>
                   </div>
 
-                  <button type="button" onClick={() => onLoginCorporate()}
+                  <button type="button" onClick={handleCorporateSubmit} disabled={loading}
                     className="w-full py-3 rounded-xl text-white font-bold text-sm transition hover:opacity-90 active:scale-95"
-                    style={{ background: 'linear-gradient(90deg,#10B981,#059669)', boxShadow: '0 4px 16px rgba(16,185,129,0.35)' }}>
-                    Kurumsal Giriş
+                    style={{
+                      background: loading ? '#94a3b8' : 'linear-gradient(90deg,#10B981,#059669)',
+                      boxShadow: loading ? 'none' : '0 4px 16px rgba(16,185,129,0.35)',
+                      cursor: loading ? 'not-allowed' : 'pointer',
+                    }}>
+                    {loading ? 'Giriş yapılıyor...' : 'Kurumsal Giriş'}
                   </button>
 
                   <p className="text-center text-xs mt-5" style={{ color: '#9CA3AF' }}>

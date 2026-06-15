@@ -1,9 +1,8 @@
 'use client';
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import {
-  makeExpiryFields,
   autoDeleteExpiredListings,
-  addDays,
 } from '../utils/expiry';
 import CorporateListingCard      from '../components/CorporateListingCard';
 import ListingFormModal          from '../components/ListingFormModal';
@@ -12,13 +11,21 @@ import MatchModal                from '../components/MatchModal';
 import ProfileModal              from '../components/ProfileModal';
 import UrgentRequestCard         from '../components/UrgentRequestCard';
 import { findMatchesForListing } from '../utils/matching';
+import { signOut, getCurrentUser } from '../../lib/auth';
+import {
+  fetchMyListings,
+  createListing,
+  updateListing,
+  deleteListing,
+  renewListing,
+} from '../../lib/listings';
 
 /*
  * Gerçek sistemde acil talepler Supabase Realtime / websocket /
  * backend event sistemi ile kurumsal panele canlı düşmelidir.
  */
 
-// ─── Mock requests ────────────────────────────────────────────────────────────
+// ─── Mock requests (eşleşme için — henüz database'e bağlı değil) ──────────────
 const MOCK_REQUESTS = [
   {
     id: 'req-1', firstName: 'Ali', lastName: 'Yılmaz', phone: '05321234567',
@@ -34,7 +41,7 @@ const MOCK_REQUESTS = [
   },
 ];
 
-// ─── Mock acil talepler ───────────────────────────────────────────────────────
+// ─── Mock acil talepler (henüz database'e bağlı değil) ────────────────────────
 const INITIAL_URGENT = [
   {
     id: 'urgent-1', isUrgent: true,
@@ -62,63 +69,50 @@ const INITIAL_URGENT = [
   },
 ];
 
-// ─── Mock listings ────────────────────────────────────────────────────────────
-const today = new Date();
-
-const INITIAL_LISTINGS = [
-  {
-    id: 'lst-1', title: 'Çorlu Reşadiye 3+1 Satılık',
-    price: '2800000', type: 'Satılık', status: 'Aktif',
-    views: 142, date: '12 Nis 2026',
-    city: 'Tekirdağ', district: 'Çorlu', neighborhood: 'Reşadiye',
-    rooms: '3+1', buildingAge: 8, sqm: 120, description: 'Güzel daire.',
-    image: 'https://images.unsplash.com/photo-1560448204-e02f11c3d0e2?w=400&q=80',
-    isDeleted: false,
-    createdAt: new Date(today.getTime() - 30 * 86400000).toISOString(),
-    expiresAt: new Date(today.getTime() + 60 * 86400000).toISOString(),
-  },
-  {
-    id: 'lst-2', title: 'Tekirdağ Hürriyet 2+1 Kiralık',
-    price: '8500', type: 'Kiralık', status: 'Aktif',
-    views: 89, date: '10 Nis 2026',
-    city: 'Tekirdağ', district: 'Çorlu', neighborhood: 'Hürriyet',
-    rooms: '2+1', buildingAge: 12, sqm: 85, description: 'Kiralık daire.',
-    image: 'https://images.unsplash.com/photo-1522708323590-d24dbb6b0267?w=400&q=80',
-    isDeleted: false,
-    createdAt: new Date(today.getTime() - 85 * 86400000).toISOString(),
-    expiresAt: new Date(today.getTime() + 5 * 86400000).toISOString(),
-  },
-  {
-    id: 'lst-3', title: 'Çorlu Kazımiye Dükkan Kiralık',
-    price: '15000', type: 'Kiralık', status: 'Pasif',
-    views: 23, date: '8 Nis 2026',
-    city: 'Tekirdağ', district: 'Çorlu', neighborhood: 'Kazımiye',
-    rooms: '2+1', buildingAge: 20, sqm: 200, description: 'Dükkan kiralık.',
-    image: '',
-    isDeleted: false,
-    createdAt: new Date(today.getTime() - 95 * 86400000).toISOString(),
-    expiresAt: new Date(today.getTime() - 5 * 86400000).toISOString(),
-  },
-];
-
-let idCounter = 10;
-const newId = () => `lst-${++idCounter}`;
-
-// ─── Yeni acil talep ekle (frontend simülasyonu) ──────────────────────────────
-// Gerçek sistemde bu fonksiyon Supabase Realtime event'i tetikler.
-export function addUrgentRequest(request, setUrgentRequests, showToast) {
-  setUrgentRequests(prev => [request, ...prev]);
-  showToast('🔥 Yeni acil talep Fırsat Köşesi\'ne düştü.');
+// ─── Veritabanı satırını UI'nin beklediği şekle çevir ─────────────────────────
+// DB alanları (listing_type, net_m2, building_age) → UI alanları (type, sqm, buildingAge)
+function dbToUiListing(row) {
+  return {
+    id:           row.id,
+    title:        row.title,
+    type:         row.listing_type,
+    price:        String(row.price ?? ''),
+    city:         row.city,
+    district:     row.district,
+    neighborhood: row.neighborhood,
+    buildingAge:  row.building_age,
+    sqm:          row.net_m2,
+    rooms:        row.rooms,
+    description:  row.description,
+    status:       row.status === 'active' ? 'Aktif' : row.status === 'passive' ? 'Pasif' : 'Süresi Doldu',
+    views:        0,
+    image:        '',
+    isDeleted:    row.is_deleted,
+    createdAt:    row.created_at,
+    expiresAt:    row.expires_at,
+    date:         row.created_at ? new Date(row.created_at).toLocaleDateString('tr-TR') : '',
+  };
 }
 
 export default function CorporateDashboard() {
-  const [listings,         setListings]         = useState(INITIAL_LISTINGS);
+  const router = useRouter();
+
+  // ── Auth + kullanıcı ─────────────────────────────────────────────────────────
+  const [currentUserId, setCurrentUserId] = useState(null);
+  const [authChecked,   setAuthChecked]   = useState(false);
+
+  // ── İlanlar (artık database'den) ─────────────────────────────────────────────
+  const [listings,        setListings]        = useState([]);
+  const [loadingListings, setLoadingListings] = useState(true);
+
+  // ── Hâlâ mock olanlar ─────────────────────────────────────────────────────────
   const [urgentRequests,   setUrgentRequests]   = useState(INITIAL_URGENT);
   const [unlockedUrgent,   setUnlockedUrgent]   = useState({});
   const [coinBalance,      setCoinBalance]       = useState(250);
   const [unlockedContacts, setUnlockedContacts]  = useState({});
   const [guests,           setGuests]            = useState([]);
 
+  // ── Modal state ────────────────────────────────────────────────────────────
   const [showFormModal,    setShowFormModal]     = useState(false);
   const [editListing,      setEditListing]       = useState(null);
   const [showCoinModal,    setShowCoinModal]     = useState(false);
@@ -136,14 +130,54 @@ export default function CorporateDashboard() {
     setTimeout(() => setToast(''), 3000);
   };
 
+  // ── Oturum koruması + kullanıcı id'sini al ───────────────────────────────────
+  useEffect(() => {
+    let mounted = true;
+    getCurrentUser().then(({ user, userType }) => {
+      if (!mounted) return;
+      if (!user || userType !== 'corporate') {
+        router.replace('/');
+        return;
+      }
+      setCurrentUserId(user.id);
+      setAuthChecked(true);
+    });
+    return () => { mounted = false; };
+  }, [router]);
+
+  // ── İlanları database'den çek ─────────────────────────────────────────────────
+  const loadListings = async () => {
+    setLoadingListings(true);
+    const res = await fetchMyListings();
+    if (res.ok) {
+      setListings(res.data.map(dbToUiListing));
+    } else {
+      showToast('❌ İlanlar yüklenemedi.');
+    }
+    setLoadingListings(false);
+  };
+
+  useEffect(() => {
+    if (authChecked && currentUserId) {
+      loadListings();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [authChecked, currentUserId]);
+
+  // ── Gerçek çıkış ─────────────────────────────────────────────────────────────
+  const handleLogout = async () => {
+    await signOut();
+    router.replace('/');
+  };
+
   // Açılmamış acil talep sayısı (badge için)
   const unreadUrgentCount = urgentRequests.filter(r => !unlockedUrgent[r.id]).length;
 
-  // ── Acil talep coin ile aç ─────────────────────────────────────────────────
+  // ── Acil talep anahtar ile aç (mock) ─────────────────────────────────────────
   const handleUnlockUrgent = (requestId) => {
     if (unlockedUrgent[requestId]) return;
     if (coinBalance < 50) {
-      showToast('❌ Yetersiz coin bakiyesi.');
+      showToast('❌ Yetersiz anahtar bakiyesi.');
       return;
     }
     setCoinBalance(p => p - 50);
@@ -157,7 +191,7 @@ export default function CorporateDashboard() {
     [listings]
   );
 
-  // ── Eşleşmeler ────────────────────────────────────────────────────────────
+  // ── Eşleşmeler (mock requests ile) ───────────────────────────────────────────
   const listingMatches = useMemo(() => {
     const map = {};
     visibleListings.forEach(l => { map[l.id] = findMatchesForListing(l, MOCK_REQUESTS); });
@@ -166,47 +200,44 @@ export default function CorporateDashboard() {
 
   const totalMatches = Object.values(listingMatches).flat().length;
 
-  // ── İlan işlemleri ─────────────────────────────────────────────────────────
-  const handleSaveListing = (data) => {
+  // ── İlan kaydet (yeni veya düzenle) — DATABASE ───────────────────────────────
+  const handleSaveListing = async (data) => {
     if (editListing) {
-      setListings(prev => prev.map(l =>
-        l.id === editListing.id
-          ? { ...l, ...data, neighborhood: data.neighborhood || data.mahalle }
-          : l
-      ));
+      const res = await updateListing(editListing.id, data);
+      if (!res.ok) { showToast('❌ İlan güncellenemedi.'); return; }
       showToast('✅ İlan güncellendi.');
     } else {
-      setListings(prev => [{
-        id: newId(), ...data,
-        neighborhood: data.neighborhood || data.mahalle,
-        city: 'Tekirdağ', district: 'Çorlu',
-        status: 'Aktif', views: 0,
-        date: new Date().toLocaleDateString('tr-TR'),
-        image: '', isDeleted: false,
-        ...makeExpiryFields(90),
-      }, ...prev]);
+      const res = await createListing(data, currentUserId);
+      if (!res.ok) { showToast('❌ İlan eklenemedi.'); return; }
       showToast('✅ İlan yayınlandı. 90 gün aktif kalacak.');
     }
     setShowFormModal(false);
     setEditListing(null);
+    await loadListings(); // listeyi tazele
   };
 
-  const handleEdit   = (listing) => { setEditListing(listing); setShowFormModal(true); };
-  const handleDelete = (id) => {
+  const handleEdit = (listing) => { setEditListing(listing); setShowFormModal(true); };
+
+  // ── İlan sil (soft delete) — DATABASE ─────────────────────────────────────────
+  const handleDelete = async (id) => {
     if (!window.confirm('Bu ilanı silmek istediğinize emin misiniz?')) return;
-    setListings(prev => prev.filter(l => l.id !== id));
+    const res = await deleteListing(id);
+    if (!res.ok) { showToast('❌ İlan silinemedi.'); return; }
     showToast('🗑 İlan silindi.');
-  };
-  const handleRenew = (id) => {
-    if (coinBalance < 20) { showToast('❌ Yetersiz coin bakiyesi.'); return; }
-    setCoinBalance(p => p - 20);
-    setListings(prev => prev.map(l =>
-      l.id !== id ? l : { ...l, expiresAt: addDays(new Date(), 90).toISOString(), status: 'Aktif', isDeleted: false }
-    ));
-    showToast('✅ İlan süresi 90 gün uzatıldı.');
+    await loadListings();
   };
 
-  // ── Coin ile match aç ──────────────────────────────────────────────────────
+  // ── İlan yenile — DATABASE (anahtar düşürme şimdilik mock) ────────────────────
+  const handleRenew = async (id) => {
+    if (coinBalance < 20) { showToast('❌ Yetersiz anahtar bakiyesi.'); return; }
+    const res = await renewListing(id);
+    if (!res.ok) { showToast('❌ Süre uzatılamadı.'); return; }
+    setCoinBalance(p => p - 20); // anahtar bakiyesi hâlâ mock
+    showToast('✅ İlan süresi 90 gün uzatıldı.');
+    await loadListings();
+  };
+
+  // ── Anahtar ile match aç (mock) ───────────────────────────────────────────────
   const handleUnlock = (request, listing) => {
     const key = `${request.id}-${listing.id}`;
     if (unlockedContacts[key] || coinBalance < 50) return;
@@ -243,6 +274,15 @@ export default function CorporateDashboard() {
     { key: 'misafir',  label: `👥 Misafir (${guests.length})` },
   ];
 
+  // ── Auth kontrol edilene kadar boş ekran ─────────────────────────────────────
+  if (!authChecked) {
+    return (
+      <div className="min-h-screen flex items-center justify-center" style={{ background: '#F5F7FA' }}>
+        <p className="text-sm" style={{ color: '#6B7280' }}>Yükleniyor...</p>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen" style={{ background: '#F5F7FA' }}>
 
@@ -278,11 +318,11 @@ export default function CorporateDashboard() {
         </div>
 
         <div className="flex items-center gap-3">
-          {/* Coin */}
+          {/* Anahtar */}
           <button onClick={() => setShowCoinModal(true)}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold transition hover:opacity-80"
             style={{ background: 'rgba(251,191,36,0.12)', color: '#FBBF24', border: '1px solid rgba(251,191,36,0.25)' }}>
-            🪙 {coinBalance} Coin
+            🗝️ {coinBalance} Anahtar
           </button>
 
           {/* Fırsat Köşesi hızlı erişim */}
@@ -314,6 +354,15 @@ export default function CorporateDashboard() {
             <div className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold"
               style={{ background: '#10B981', color: '#fff' }}>RE</div>
             <span className="text-white text-sm font-medium hidden sm:block">Referans Emlak</span>
+          </button>
+
+          {/* Çıkış */}
+          <button
+            onClick={handleLogout}
+            className="px-3 py-1.5 rounded-xl text-xs font-medium transition hover:opacity-80"
+            style={{ background: 'rgba(255,255,255,0.07)', color: '#94a3b8', border: '1px solid rgba(255,255,255,0.1)' }}
+          >
+            Çıkış
           </button>
         </div>
       </nav>
@@ -362,7 +411,11 @@ export default function CorporateDashboard() {
 
         {/* ── İlanlar Grid ── */}
         {activeTab === 'ilanlar' && (
-          visibleListings.length === 0 ? (
+          loadingListings ? (
+            <div className="text-center py-20" style={{ color: '#9CA3AF' }}>
+              <p className="text-sm">İlanlar yükleniyor...</p>
+            </div>
+          ) : visibleListings.length === 0 ? (
             <div className="text-center py-20">
               <p className="text-4xl mb-3">🏠</p>
               <p className="font-semibold" style={{ color: '#374151' }}>Henüz ilan eklemediniz.</p>
@@ -392,7 +445,6 @@ export default function CorporateDashboard() {
         {/* ── Fırsat Köşesi ── */}
         {activeTab === 'firsat' && (
           <div>
-            {/* Başlık */}
             <div
               className="rounded-2xl p-5 mb-6"
               style={{
@@ -422,12 +474,11 @@ export default function CorporateDashboard() {
                   className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold flex-shrink-0"
                   style={{ background: 'rgba(251,191,36,0.15)', color: '#FBBF24', border: '1px solid rgba(251,191,36,0.3)' }}
                 >
-                  🪙 {coinBalance} Coin
+                  🗝️ {coinBalance} Anahtar
                 </div>
               </div>
             </div>
 
-            {/* Kartlar */}
             {urgentRequests.length === 0 ? (
               <div className="text-center py-16" style={{ color: '#9CA3AF' }}>
                 <p className="text-4xl mb-3">🔥</p>

@@ -1,6 +1,5 @@
 'use client';
 import { useState } from 'react';
-import { makeExpiryFields, scheduleRequestExpiryNotification } from '../utils/expiry';
 
 const CURRENT_USER = {
   firstName: '',
@@ -125,7 +124,7 @@ function Overlay({ children, onClose }) {
 
 // ─── Ana Modal ────────────────────────────────────────────────────────────────
 
-export default function RequestModal({ onClose, onUrgentSubmit }) {
+export default function RequestModal({ onClose, onSubmit }) {
   const needFirstName = !CURRENT_USER.firstName;
   const needLastName  = !CURRENT_USER.lastName;
   const needPhone     = !CURRENT_USER.phone;
@@ -133,6 +132,8 @@ export default function RequestModal({ onClose, onUrgentSubmit }) {
 
   const [submitted, setSubmitted] = useState(false);
   const [errors,    setErrors]    = useState({});
+  const [loading,   setLoading]   = useState(false);
+  const [submitError, setSubmitError] = useState('');
 
   const [form, setForm] = useState({
     listingType: '',
@@ -153,6 +154,7 @@ export default function RequestModal({ onClose, onUrgentSubmit }) {
   const set = (key, val) => {
     setForm(prev => ({ ...prev, [key]: val }));
     if (errors[key]) setErrors(prev => ({ ...prev, [key]: '' }));
+    if (submitError) setSubmitError('');
   };
 
   const handlePhone  = (val) => set('phone', val.replace(/\D/g, '').slice(0, 11));
@@ -180,35 +182,29 @@ export default function RequestModal({ onClose, onUrgentSubmit }) {
     return e;
   };
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     const e = validate();
     if (Object.keys(e).length > 0) { setErrors(e); return; }
 
-    const expiryFields = makeExpiryFields(60);
-
     const payload = {
-      id:           `req-${Date.now()}`,
       ...form,
-      firstName:    form.firstName || CURRENT_USER.firstName,
-      lastName:     form.lastName  || CURRENT_USER.lastName,
-      phone:        form.phone     || CURRENT_USER.phone,
-      minBudget:    form.minButce,
-      maxBudget:    form.maxButce,
-      neighborhood: form.mahalle,
-      rooms:        form.odaSayisi,
-      minButceRaw:  parseTL(form.minButce),
-      maxButceRaw:  parseTL(form.maxButce),
-      createdAt:    new Date().toLocaleDateString('tr-TR'),
-      status:       'new',
-      ...expiryFields,
+      firstName:   form.firstName || CURRENT_USER.firstName,
+      lastName:    form.lastName  || CURRENT_USER.lastName,
+      phone:       form.phone     || CURRENT_USER.phone,
+      minButceRaw: parseTL(form.minButce),
+      maxButceRaw: parseTL(form.maxButce),
     };
 
-    console.log('📋 Özel Talep Formu Gönderildi:', payload);
-    scheduleRequestExpiryNotification(payload);
-
-    // Acil talep ise kurumsal panele ilet
-    if (payload.isUrgent && typeof onUrgentSubmit === 'function') {
-      onUrgentSubmit(payload);
+    // Kaydı page.js yapıyor (gerçek kullanıcı id'si orada)
+    if (typeof onSubmit === 'function') {
+      setLoading(true);
+      setSubmitError('');
+      const res = await onSubmit(payload);
+      setLoading(false);
+      if (res && !res.ok) {
+        setSubmitError(res.error || 'Talep kaydedilemedi. Lütfen tekrar deneyin.');
+        return;
+      }
     }
 
     setSubmitted(true);
@@ -278,6 +274,14 @@ export default function RequestModal({ onClose, onUrgentSubmit }) {
         className="px-6 py-5 flex flex-col gap-4 overflow-y-auto"
         style={{ maxHeight: '68vh' }}
       >
+
+        {/* Kayıt hatası */}
+        {submitError && (
+          <div className="px-4 py-3 rounded-xl text-xs font-semibold"
+            style={{ background: '#FEE2E2', color: '#991B1B', border: '1px solid #FECACA' }}>
+            ⚠️ {submitError}
+          </div>
+        )}
 
         {/* 1. İlan Türü */}
         <Section title="İlan Türü" icon="🏷️">
@@ -502,7 +506,7 @@ export default function RequestModal({ onClose, onUrgentSubmit }) {
                 )}
               </div>
               <p className="text-xs" style={{ color: '#6B7280' }}>
-                Bu seçeneği işaretlerseniz talebiniz kurumsal kullanıcılara öncelikli olarak gösterilir.
+                Bu seçeneği işaretlerseniz talebiniz kurumsal kullanıcılara Fırsat Köşesi'nde öncelikli olarak gösterilir.
               </p>
             </div>
           </label>
@@ -526,18 +530,22 @@ export default function RequestModal({ onClose, onUrgentSubmit }) {
         <button
           type="button"
           onClick={handleSubmit}
+          disabled={loading}
           className="py-3 px-8 rounded-xl text-white text-sm font-bold transition hover:opacity-90 active:scale-95"
           style={{
             flex: 2,
-            background: form.isUrgent
-              ? 'linear-gradient(90deg,#F59E0B,#D97706)'
-              : 'linear-gradient(90deg,#2F80ED,#1a6fd4)',
-            boxShadow: form.isUrgent
+            background: loading
+              ? '#94a3b8'
+              : form.isUrgent
+                ? 'linear-gradient(90deg,#F59E0B,#D97706)'
+                : 'linear-gradient(90deg,#2F80ED,#1a6fd4)',
+            boxShadow: loading ? 'none' : form.isUrgent
               ? '0 4px 14px rgba(245,158,11,0.35)'
               : '0 4px 14px rgba(47,128,237,0.35)',
+            cursor: loading ? 'not-allowed' : 'pointer',
           }}
         >
-          {form.isUrgent ? '🔥 Acil Talebimi Gönder →' : 'Talebimi Gönder →'}
+          {loading ? 'Gönderiliyor...' : (form.isUrgent ? '🔥 Acil Talebimi Gönder →' : 'Talebimi Gönder →')}
         </button>
       </div>
 
