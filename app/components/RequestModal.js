@@ -134,6 +134,7 @@ export default function RequestModal({ onClose, onSubmit }) {
   const [errors,    setErrors]    = useState({});
   const [loading,   setLoading]   = useState(false);
   const [submitError, setSubmitError] = useState('');
+  const [matchInfo, setMatchInfo] = useState(0);
 
   const [form, setForm] = useState({
     listingType: '',
@@ -195,7 +196,6 @@ export default function RequestModal({ onClose, onSubmit }) {
       maxButceRaw: parseTL(form.maxButce),
     };
 
-    // Kaydı page.js yapıyor (gerçek kullanıcı id'si orada)
     if (typeof onSubmit === 'function') {
       setLoading(true);
       setSubmitError('');
@@ -205,6 +205,7 @@ export default function RequestModal({ onClose, onSubmit }) {
         setSubmitError(res.error || 'Talep kaydedilemedi. Lütfen tekrar deneyin.');
         return;
       }
+      if (res && res.matchCount) setMatchInfo(res.matchCount);
     }
 
     setSubmitted(true);
@@ -230,6 +231,14 @@ export default function RequestModal({ onClose, onSubmit }) {
               style={{ background: '#FEF3C7', color: '#D97706', border: '1px solid #FDE68A' }}
             >
               🔥 Talebiniz acil olarak işaretlendi ve öncelikli sıraya alındı.
+            </div>
+          )}
+          {matchInfo > 0 && (
+            <div
+              className="flex items-center gap-2 px-4 py-2 rounded-full text-xs font-bold mb-2"
+              style={{ background: '#D1FAE5', color: '#059669', border: '1px solid #A7F3D0' }}
+            >
+              🎯 Eşleşme var! İlan sahibi kısa süre içinde sizinle iletişime geçebilir.
             </div>
           )}
           <p className="text-sm" style={{ color: '#6B7280' }}>

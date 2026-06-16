@@ -9,58 +9,9 @@ import RequestAndFilterHero   from './components/RequestAndFilterHero';
 import ActiveFilterTags       from './components/ActiveFilterTags';
 import { filterListings, EMPTY_FILTERS } from './utils/filterListings';
 import { signInIndividual, signInCorporate, signOut, getCurrentUser, onAuthStateChange } from '../lib/auth';
-import { createRequest } from '../lib/requests';
-
-const MOCK_LISTINGS = [
-  {
-    id: 1, title: 'Çorlu Reşadiye 3+1 Satılık Daire',
-    price: '2800000', rooms: '3+1', type: 'Satılık',
-    location: 'Çorlu', neighborhood: 'Reşadiye',
-    sqm: 120, buildingAge: 8,
-    features: ['Balkon','Asansör','Otopark'],
-    image: 'https://images.unsplash.com/photo-1560448204-e02f11c3d0e2?w=400&q=80',
-  },
-  {
-    id: 2, title: 'Tekirdağ Hürriyet 2+1 Kiralık',
-    price: '8500', rooms: '2+1', type: 'Kiralık',
-    location: 'Tekirdağ', neighborhood: 'Hürriyet',
-    sqm: 85, buildingAge: 12,
-    features: ['Balkon','Eşyalı'],
-    image: 'https://images.unsplash.com/photo-1522708323590-d24dbb6b0267?w=400&q=80',
-  },
-  {
-    id: 3, title: 'Çorlu Kazımiye 1+1 Kiralık',
-    price: '5200', rooms: '1+1', type: 'Kiralık',
-    location: 'Çorlu', neighborhood: 'Kazımiye',
-    sqm: 55, buildingAge: 3,
-    features: ['Asansör'],
-    image: 'https://images.unsplash.com/photo-1502672260266-1c1ef2d93688?w=400&q=80',
-  },
-  {
-    id: 4, title: 'Tekirdağ Cemaliye 4+1 Müstakil',
-    price: '6200000', rooms: '4+1', type: 'Satılık',
-    location: 'Tekirdağ', neighborhood: 'Cemaliye',
-    sqm: 220, buildingAge: 2,
-    features: ['Balkon','Otopark','Güvenlik','Havuz','Site içinde'],
-    image: 'https://images.unsplash.com/photo-1570129477492-45c003edd2be?w=400&q=80',
-  },
-  {
-    id: 5, title: 'Çorlu Muhittin 2+1 Satılık',
-    price: '3100000', rooms: '2+1', type: 'Satılık',
-    location: 'Çorlu', neighborhood: 'Muhittin',
-    sqm: 95, buildingAge: 15,
-    features: ['Balkon'],
-    image: 'https://images.unsplash.com/photo-1493809842364-78817add7ffb?w=400&q=80',
-  },
-  {
-    id: 6, title: 'Tekirdağ Nusratiye 3+1 Kiralık',
-    price: '12000', rooms: '3+1', type: 'Kiralık',
-    location: 'Tekirdağ', neighborhood: 'Nusratiye',
-    sqm: 130, buildingAge: 6,
-    features: ['Asansör','Eşyalı','Site içinde'],
-    image: 'https://images.unsplash.com/photo-1497366216548-37526070297c?w=400&q=80',
-  },
-];
+import { createRequest, runMatchForRequest } from '../lib/requests';
+import { fetchPublicListings } from '../lib/listings';
+import { fetchMyFavoriteIds, addFavorite, removeFavorite } from '../lib/favoriteService';
 
 function formatListingPrice(listing) {
   const n = Number(listing.price);
@@ -68,6 +19,23 @@ function formatListingPrice(listing) {
   return listing.type === 'Kiralık'
     ? `${n.toLocaleString('tr-TR')} ₺/ay`
     : `${n.toLocaleString('tr-TR')} ₺`;
+}
+
+// ─── DB ilan satırını UI formatına çevir ──────────────────────────────────────
+function dbToUiListing(row) {
+  return {
+    id:           row.id,
+    title:        row.title,
+    type:         row.listing_type,
+    price:        String(row.price ?? ''),
+    location:     row.neighborhood || row.district || row.city || '',
+    neighborhood: row.neighborhood,
+    rooms:        row.rooms,
+    sqm:          row.net_m2,
+    buildingAge:  row.building_age,
+    features:     [],
+    image:        '',
+  };
 }
 
 const CLEAR_DETAILED = {
@@ -93,7 +61,7 @@ function getFullName(user) {
 export default function HomePage() {
   const router = useRouter();
 
-  // ── Gerçek auth state ──────────────────────────────────────────────────────
+  // ── Auth state ──────────────────────────────────────────────────────────────
   const [user,        setUser]        = useState(null);
   const [userType,    setUserType]    = useState(null);
   const [isGuest,     setIsGuest]     = useState(false);
@@ -109,15 +77,25 @@ export default function HomePage() {
   const [showRequestModal, setShowRequestModal] = useState(false);
   const [showProfileModal, setShowProfileModal] = useState(false);
 
+  // ── İlanlar (gerçek) ─────────────────────────────────────────────────────────
+  const [listings,        setListings]        = useState([]);
+  const [loadingListings, setLoadingListings] = useState(true);
+
   // ── Filtre & favori ─────────────────────────────────────────────────────────
   const [filters, setFilters]     = useState(EMPTY_FILTERS);
-  const [favorites, setFavorites] = useState([]);
+  const [favorites, setFavorites] = useState([]); // listing_id (UUID) dizisi
 
   // ── Uyarı ─────────────────────────────────────────────────────────────────
   const [warning, setWarning] = useState('');
   const showWarning = (msg) => {
     setWarning(msg);
     setTimeout(() => setWarning(''), 3500);
+  };
+
+  // ── Favori id'leri çek (yardımcı) ─────────────────────────────────────────────
+  const loadFavorites = async () => {
+    const res = await fetchMyFavoriteIds();
+    if (res.ok) setFavorites(res.data);
   };
 
   // ── Session restore ─────────────────────────────────────────────────────────
@@ -129,6 +107,7 @@ export default function HomePage() {
       if (user) {
         setUser(user);
         setUserType(userType);
+        if (userType !== 'corporate') loadFavorites();
       }
       setLoadingAuth(false);
     });
@@ -142,6 +121,7 @@ export default function HomePage() {
       } else {
         setUser(null);
         setUserType(null);
+        setFavorites([]);
       }
     });
 
@@ -149,6 +129,17 @@ export default function HomePage() {
       mounted = false;
       subscription?.unsubscribe();
     };
+  }, []);
+
+  // ── İlanları çek ──────────────────────────────────────────────────────────────
+  useEffect(() => {
+    let mounted = true;
+    fetchPublicListings().then(res => {
+      if (!mounted) return;
+      if (res.ok) setListings(res.data.map(dbToUiListing));
+      setLoadingListings(false);
+    });
+    return () => { mounted = false; };
   }, []);
 
   // ── Bireysel giriş ──────────────────────────────────────────────────────────
@@ -161,6 +152,7 @@ export default function HomePage() {
     setUserType(u.user_metadata?.user_type || 'individual');
     setIsGuest(false);
     setShowLoginModal(false);
+    loadFavorites();
 
     if (pendingAction === 'openRequestForm') {
       setShowRequestModal(true);
@@ -201,6 +193,7 @@ export default function HomePage() {
     setUserType(null);
     setIsGuest(false);
     setPendingAction(null);
+    setFavorites([]);
   };
 
   const handleCloseLogin = () => { setShowLoginModal(false); setPendingAction(null); };
@@ -230,19 +223,32 @@ export default function HomePage() {
     setShowRequestModal(true);
   };
 
-  // ── Talep kaydet (gerçek database) ────────────────────────────────────────
+  // ── Talep kaydet + eşleşme hesapla ────────────────────────────────────────
   const handleSubmitRequest = async (formPayload) => {
     if (!user) return { ok: false, error: 'Oturum bulunamadı. Lütfen tekrar giriş yapın.' };
     const res = await createRequest(formPayload, user.id);
-    return res; // { ok: true/false, error? }
+    if (!res.ok) return res;
+
+    // Talep oluştu → güvenli RPC ile eşleşmeleri hesapla
+    let matchCount = 0;
+    const matchRes = await runMatchForRequest(res.data.id);
+    if (matchRes.ok) matchCount = matchRes.created;
+
+    return { ok: true, matchCount };
   };
 
-  // ── Favori ───────────────────────────────────────────────────────────────────
-  const toggleFavorite = (id) => {
+  // ── Favori toggle (gerçek DB) ─────────────────────────────────────────────────
+  const toggleFavorite = async (id) => {
     if (!user || isGuest) { setLoginMode('individual'); setShowLoginModal(true); return; }
-    setFavorites(prev =>
-      prev.includes(id) ? prev.filter(f => f !== id) : [...prev, id]
-    );
+
+    const isFav = favorites.includes(id);
+    setFavorites(prev => isFav ? prev.filter(f => f !== id) : [...prev, id]);
+
+    const res = isFav ? await removeFavorite(id) : await addFavorite(id);
+    if (!res.ok) {
+      setFavorites(prev => isFav ? [...prev, id] : prev.filter(f => f !== id));
+      showWarning('Favori işlemi sırasında bir hata oluştu.');
+    }
   };
 
   // ── Filtre ────────────────────────────────────────────────────────────────
@@ -257,7 +263,7 @@ export default function HomePage() {
   const handleClearAll      = () => setFilters(EMPTY_FILTERS);
   const handleClearDetailed = () => setFilters(prev => ({ ...prev, ...CLEAR_DETAILED }));
 
-  const displayListings = useMemo(() => filterListings(MOCK_LISTINGS, filters), [filters]);
+  const displayListings = useMemo(() => filterListings(listings, filters), [listings, filters]);
 
   return (
     <div className="min-h-screen" style={{ background: '#F5F7FA' }}>
@@ -378,34 +384,44 @@ export default function HomePage() {
           </span>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
-          {displayListings.map(listing => (
-            <ListingCard
-              key={listing.id}
-              listing={{ ...listing, price: formatListingPrice(listing) }}
-              isFavorite={favorites.includes(listing.id)}
-              onToggleFavorite={() => toggleFavorite(listing.id)}
-            />
-          ))}
-        </div>
-
-        {displayListings.length === 0 && (
-          <div className="text-center py-20">
-            <p className="text-4xl mb-3">🔍</p>
-            <p className="font-semibold" style={{ color: '#374151' }}>
-              Bu kriterlere uygun ilan bulunamadı
-            </p>
-            <p className="text-sm mt-1 mb-4" style={{ color: '#9CA3AF' }}>
-              Filtreleri değiştirmeyi deneyin
-            </p>
-            <button
-              onClick={handleClearAll}
-              className="px-5 py-2.5 rounded-xl text-sm font-bold transition hover:opacity-90"
-              style={{ background: '#2F80ED', color: '#fff' }}
-            >
-              Filtreleri Temizle
-            </button>
+        {loadingListings ? (
+          <div className="text-center py-20" style={{ color: '#9CA3AF' }}>
+            <p className="text-sm">İlanlar yükleniyor...</p>
           </div>
+        ) : (
+          <>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+              {displayListings.map(listing => (
+                <ListingCard
+                  key={listing.id}
+                  listing={{ ...listing, price: formatListingPrice(listing) }}
+                  isFavorite={favorites.includes(listing.id)}
+                  onToggleFavorite={() => toggleFavorite(listing.id)}
+                />
+              ))}
+            </div>
+
+            {displayListings.length === 0 && (
+              <div className="text-center py-20">
+                <p className="text-4xl mb-3">🔍</p>
+                <p className="font-semibold" style={{ color: '#374151' }}>
+                  {listings.length === 0 ? 'Henüz ilan bulunmuyor' : 'Bu kriterlere uygun ilan bulunamadı'}
+                </p>
+                <p className="text-sm mt-1 mb-4" style={{ color: '#9CA3AF' }}>
+                  {listings.length === 0 ? 'Kurumsal kullanıcılar ilan ekledikçe burada görünecek.' : 'Filtreleri değiştirmeyi deneyin'}
+                </p>
+                {listings.length > 0 && (
+                  <button
+                    onClick={handleClearAll}
+                    className="px-5 py-2.5 rounded-xl text-sm font-bold transition hover:opacity-90"
+                    style={{ background: '#2F80ED', color: '#fff' }}
+                  >
+                    Filtreleri Temizle
+                  </button>
+                )}
+              </div>
+            )}
+          </>
         )}
       </div>
 
@@ -428,7 +444,8 @@ export default function HomePage() {
       {showProfileModal && user && !isGuest && (
         <ProfileModal
           onClose={() => setShowProfileModal(false)}
-          favorites={MOCK_LISTINGS.filter(l => favorites.includes(l.id))}
+          onLogout={handleLogout}
+          onFavoritesChanged={loadFavorites}
         />
       )}
     </div>

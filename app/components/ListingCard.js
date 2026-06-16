@@ -13,12 +13,18 @@ export default function ListingCard({ listing, isFavorite, onToggleFavorite }) {
       onMouseLeave={e => e.currentTarget.style.boxShadow = '0 1px 4px rgba(13,27,42,0.06)'}
     >
       {/* Image */}
-      <div className="relative overflow-hidden" style={{ height: '190px' }}>
-        <img
-          src={listing.image}
-          alt={listing.title}
-          className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
-        />
+      <div className="relative overflow-hidden" style={{ height: '190px', background: '#F1F5F9' }}>
+        {listing.image ? (
+          <img
+            src={listing.image}
+            alt={listing.title}
+            className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
+          />
+        ) : (
+          <div className="w-full h-full flex items-center justify-center">
+            <span className="text-5xl">🏠</span>
+          </div>
+        )}
         {/* Type Badge */}
         <span
           className="absolute top-3 left-3 text-xs font-bold px-3 py-1 rounded-full"
@@ -58,8 +64,8 @@ export default function ListingCard({ listing, isFavorite, onToggleFavorite }) {
           className="flex items-center gap-3 text-xs pt-3"
           style={{ borderTop: '1px solid #F3F4F6', color: '#6B7280' }}
         >
-          <span>🛏 {listing.rooms}</span>
-          <span>📍 {listing.location}</span>
+          {listing.rooms && <span>🛏 {listing.rooms}</span>}
+          {listing.location && <span>📍 {listing.location}</span>}
         </div>
       </div>
     </div>

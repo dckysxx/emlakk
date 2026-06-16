@@ -10,7 +10,6 @@ import CoinStoreModal            from '../components/CoinStoreModal';
 import MatchModal                from '../components/MatchModal';
 import ProfileModal              from '../components/ProfileModal';
 import UrgentRequestCard         from '../components/UrgentRequestCard';
-import { findMatchesForListing } from '../utils/matching';
 import { signOut, getCurrentUser } from '../../lib/auth';
 import {
   fetchMyListings,
@@ -19,29 +18,15 @@ import {
   deleteListing,
   renewListing,
 } from '../../lib/listings';
+import { fetchMatchedRequests } from '../../lib/matchService';
+import { fetchKeyBalance, unlockMatchedContact } from '../../lib/keyService';
 
 /*
  * Gerçek sistemde acil talepler Supabase Realtime / websocket /
  * backend event sistemi ile kurumsal panele canlı düşmelidir.
  */
 
-// ─── Mock requests (eşleşme için — henüz database'e bağlı değil) ──────────────
-const MOCK_REQUESTS = [
-  {
-    id: 'req-1', firstName: 'Ali', lastName: 'Yılmaz', phone: '05321234567',
-    listingType: 'Satılık', il: 'Tekirdağ', ilce: 'Çorlu', mahalle: 'Reşadiye',
-    odaSayisi: '3+1', binaYasi: '6', metrekare: '115',
-    minButce: '2.500.000', maxButce: '3.200.000',
-  },
-  {
-    id: 'req-2', firstName: 'Ayşe', lastName: 'Kara', phone: '05459876543',
-    listingType: 'Kiralık', il: 'Tekirdağ', ilce: 'Çorlu', mahalle: 'Hürriyet',
-    odaSayisi: '2+1', binaYasi: '10', metrekare: '80',
-    minButce: '7.000', maxButce: '10.000',
-  },
-];
-
-// ─── Mock acil talepler (henüz database'e bağlı değil) ────────────────────────
+// ─── Mock acil talepler (Fırsat Köşesi — henüz database'e bağlı değil) ────────
 const INITIAL_URGENT = [
   {
     id: 'urgent-1', isUrgent: true,
@@ -69,8 +54,7 @@ const INITIAL_URGENT = [
   },
 ];
 
-// ─── Veritabanı satırını UI'nin beklediği şekle çevir ─────────────────────────
-// DB alanları (listing_type, net_m2, building_age) → UI alanları (type, sqm, buildingAge)
+// ─── DB listing → UI ──────────────────────────────────────────────────────────
 function dbToUiListing(row) {
   return {
     id:           row.id,
@@ -94,6 +78,10 @@ function dbToUiListing(row) {
   };
 }
 
+function fmtMoney(v) {
+  return v != null ? Number(v).toLocaleString('tr-TR') + ' ₺' : '—';
+}
+
 export default function CorporateDashboard() {
   const router = useRouter();
 
@@ -101,14 +89,23 @@ export default function CorporateDashboard() {
   const [currentUserId, setCurrentUserId] = useState(null);
   const [authChecked,   setAuthChecked]   = useState(false);
 
-  // ── İlanlar (artık database'den) ─────────────────────────────────────────────
+  // ── İlanlar (database) ─────────────────────────────────────────────────────
   const [listings,        setListings]        = useState([]);
   const [loadingListings, setLoadingListings] = useState(true);
 
-  // ── Hâlâ mock olanlar ─────────────────────────────────────────────────────────
+  // ── Eşleşen talepler (database, sansürlü) ────────────────────────────────────
+  const [matchedReqs,     setMatchedReqs]     = useState([]);
+  const [loadingMatched,  setLoadingMatched]  = useState(true);
+
+  // Açılan eşleşmeler: { ["<request_id>-<listing_id>"]: { first_name, last_name, phone } }
+  const [unlockedMatched, setUnlockedMatched] = useState({});
+
+  // ── Anahtar bakiyesi (artık DATABASE) ────────────────────────────────────────
+  const [coinBalance, setCoinBalance] = useState(0);
+
+  // ── Hâlâ mock olanlar (Fırsat Köşesi + Misafir) ──────────────────────────────
   const [urgentRequests,   setUrgentRequests]   = useState(INITIAL_URGENT);
   const [unlockedUrgent,   setUnlockedUrgent]   = useState({});
-  const [coinBalance,      setCoinBalance]       = useState(250);
   const [unlockedContacts, setUnlockedContacts]  = useState({});
   const [guests,           setGuests]            = useState([]);
 
@@ -124,6 +121,8 @@ export default function CorporateDashboard() {
   const [guestSearch,      setGuestSearch]       = useState('');
   const [guestStatus,      setGuestStatus]       = useState('Tümü');
   const [guestSort,        setGuestSort]         = useState('En yeni');
+
+  const [unlockingId, setUnlockingId] = useState(null); // hangi çift açılıyor (request-listing)
 
   const showToast = (msg) => {
     setToast(msg);
@@ -145,21 +144,34 @@ export default function CorporateDashboard() {
     return () => { mounted = false; };
   }, [router]);
 
-  // ── İlanları database'den çek ─────────────────────────────────────────────────
+  // ── Anahtar bakiyesini çek ─────────────────────────────────────────────────
+  const loadKeyBalance = async () => {
+    const res = await fetchKeyBalance();
+    if (res.ok) setCoinBalance(res.balance);
+  };
+
+  // ── İlanları çek ──────────────────────────────────────────────────────────────
   const loadListings = async () => {
     setLoadingListings(true);
     const res = await fetchMyListings();
-    if (res.ok) {
-      setListings(res.data.map(dbToUiListing));
-    } else {
-      showToast('❌ İlanlar yüklenemedi.');
-    }
+    if (res.ok) setListings(res.data.map(dbToUiListing));
+    else showToast('❌ İlanlar yüklenemedi.');
     setLoadingListings(false);
+  };
+
+  // ── Eşleşen talepleri çek ─────────────────────────────────────────────────────
+  const loadMatchedRequests = async () => {
+    setLoadingMatched(true);
+    const res = await fetchMatchedRequests();
+    if (res.ok) setMatchedReqs(res.data);
+    setLoadingMatched(false);
   };
 
   useEffect(() => {
     if (authChecked && currentUserId) {
+      loadKeyBalance();
       loadListings();
+      loadMatchedRequests();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [authChecked, currentUserId]);
@@ -170,19 +182,47 @@ export default function CorporateDashboard() {
     router.replace('/');
   };
 
-  // Açılmamış acil talep sayısı (badge için)
   const unreadUrgentCount = urgentRequests.filter(r => !unlockedUrgent[r.id]).length;
 
-  // ── Acil talep anahtar ile aç (mock) ─────────────────────────────────────────
-  const handleUnlockUrgent = (requestId) => {
-    if (unlockedUrgent[requestId]) return;
-    if (coinBalance < 50) {
-      showToast('❌ Yetersiz anahtar bakiyesi.');
+  // ── Eşleşen talep detayını aç (gerçek, atomik RPC) — ilan+talep çifti bazlı ──
+  const handleUnlockMatched = async (req) => {
+    const key = `${req.request_id}-${req.listing_id}`;
+    if (unlockedMatched[key]) return; // bu çift zaten açık
+    if (coinBalance < 50) { showToast('❌ Yetersiz anahtar bakiyesi.'); return; }
+
+    setUnlockingId(key);
+    const res = await unlockMatchedContact(req.request_id, req.listing_id);
+    setUnlockingId(null);
+
+    if (!res || !res.ok) {
+      showToast(`❌ ${res?.error || 'İşlem başarısız.'}`);
       return;
     }
-    setCoinBalance(p => p - 50);
+
+    setUnlockedMatched(prev => ({
+      ...prev,
+      [key]: {
+        first_name: res.first_name,
+        last_name:  res.last_name,
+        phone:      res.phone,
+      },
+    }));
+
+    if (!res.already) {
+      await loadKeyBalance();
+      showToast('✅ İletişim bilgileri açıldı.');
+    } else {
+      showToast('ℹ️ Bu talep zaten açılmıştı.');
+    }
+  };
+
+  // ── Acil talep anahtar ile aç (mock — Fırsat Köşesi) ─────────────────────────
+  const handleUnlockUrgent = (requestId) => {
+    if (unlockedUrgent[requestId]) return;
+    if (coinBalance < 50) { showToast('❌ Yetersiz anahtar bakiyesi.'); return; }
     setUnlockedUrgent(p => ({ ...p, [requestId]: true }));
     showToast('✅ Fırsat detayları açıldı.');
+    // Not: Fırsat Köşesi henüz mock, gerçek anahtar düşümü sonraki adımda
   };
 
   // ── Visible listings ───────────────────────────────────────────────────────
@@ -191,16 +231,7 @@ export default function CorporateDashboard() {
     [listings]
   );
 
-  // ── Eşleşmeler (mock requests ile) ───────────────────────────────────────────
-  const listingMatches = useMemo(() => {
-    const map = {};
-    visibleListings.forEach(l => { map[l.id] = findMatchesForListing(l, MOCK_REQUESTS); });
-    return map;
-  }, [visibleListings]);
-
-  const totalMatches = Object.values(listingMatches).flat().length;
-
-  // ── İlan kaydet (yeni veya düzenle) — DATABASE ───────────────────────────────
+  // ── İlan işlemleri ─────────────────────────────────────────────────────────
   const handleSaveListing = async (data) => {
     if (editListing) {
       const res = await updateListing(editListing.id, data);
@@ -213,12 +244,11 @@ export default function CorporateDashboard() {
     }
     setShowFormModal(false);
     setEditListing(null);
-    await loadListings(); // listeyi tazele
+    await loadListings();
   };
 
   const handleEdit = (listing) => { setEditListing(listing); setShowFormModal(true); };
 
-  // ── İlan sil (soft delete) — DATABASE ─────────────────────────────────────────
   const handleDelete = async (id) => {
     if (!window.confirm('Bu ilanı silmek istediğinize emin misiniz?')) return;
     const res = await deleteListing(id);
@@ -227,33 +257,13 @@ export default function CorporateDashboard() {
     await loadListings();
   };
 
-  // ── İlan yenile — DATABASE (anahtar düşürme şimdilik mock) ────────────────────
   const handleRenew = async (id) => {
     if (coinBalance < 20) { showToast('❌ Yetersiz anahtar bakiyesi.'); return; }
     const res = await renewListing(id);
     if (!res.ok) { showToast('❌ Süre uzatılamadı.'); return; }
-    setCoinBalance(p => p - 20); // anahtar bakiyesi hâlâ mock
     showToast('✅ İlan süresi 90 gün uzatıldı.');
     await loadListings();
-  };
-
-  // ── Anahtar ile match aç (mock) ───────────────────────────────────────────────
-  const handleUnlock = (request, listing) => {
-    const key = `${request.id}-${listing.id}`;
-    if (unlockedContacts[key] || coinBalance < 50) return;
-    setCoinBalance(p => p - 50);
-    setUnlockedContacts(p => ({ ...p, [key]: true }));
-    const exists = guests.find(g => g.requestId === request.id && g.listingId === listing.id);
-    if (!exists) {
-      setGuests(p => [{
-        id: `guest-${Date.now()}`, requestId: request.id, listingId: listing.id,
-        firstName: request.firstName, lastName: request.lastName, phone: request.phone,
-        listingTitle: listing.title, listingStatus: listing.status, listingType: request.listingType,
-        mahalle: request.mahalle, odaSayisi: request.odaSayisi,
-        minBudget: request.minButce, maxBudget: request.maxButce,
-        unlockedAt: new Date().toLocaleDateString('tr-TR'),
-      }, ...p]);
-    }
+    // Not: ilan uzatma anahtar düşümü ileride RPC'ye bağlanacak
   };
 
   // ── Misafir filtre ─────────────────────────────────────────────────────────
@@ -270,11 +280,11 @@ export default function CorporateDashboard() {
 
   const TABS = [
     { key: 'ilanlar',  label: `🏠 İlanlarım (${visibleListings.length})` },
+    { key: 'talepler', label: `📥 Gelen Talepler (${matchedReqs.length})` },
     { key: 'firsat',   label: `🔥 Fırsat Köşesi`, badge: unreadUrgentCount },
     { key: 'misafir',  label: `👥 Misafir (${guests.length})` },
   ];
 
-  // ── Auth kontrol edilene kadar boş ekran ─────────────────────────────────────
   if (!authChecked) {
     return (
       <div className="min-h-screen flex items-center justify-center" style={{ background: '#F5F7FA' }}>
@@ -291,9 +301,9 @@ export default function CorporateDashboard() {
         <div
           className="fixed top-5 left-1/2 -translate-x-1/2 z-50 px-5 py-3 rounded-2xl text-sm font-semibold shadow-lg"
           style={{
-            background: toast.startsWith('❌') ? '#FEE2E2' : toast.startsWith('🔥') ? '#FFFBEB' : '#D1FAE5',
-            color:      toast.startsWith('❌') ? '#991B1B' : toast.startsWith('🔥') ? '#92400E' : '#065F46',
-            border:     toast.startsWith('❌') ? '1px solid #FECACA' : toast.startsWith('🔥') ? '1px solid #FDE68A' : '1px solid #A7F3D0',
+            background: toast.startsWith('❌') ? '#FEE2E2' : toast.startsWith('🔥') ? '#FFFBEB' : toast.startsWith('ℹ️') ? '#DBEAFE' : '#D1FAE5',
+            color:      toast.startsWith('❌') ? '#991B1B' : toast.startsWith('🔥') ? '#92400E' : toast.startsWith('ℹ️') ? '#1E40AF' : '#065F46',
+            border:     toast.startsWith('❌') ? '1px solid #FECACA' : toast.startsWith('🔥') ? '1px solid #FDE68A' : toast.startsWith('ℹ️') ? '1px solid #BFDBFE' : '1px solid #A7F3D0',
             whiteSpace: 'nowrap',
           }}
         >
@@ -318,14 +328,12 @@ export default function CorporateDashboard() {
         </div>
 
         <div className="flex items-center gap-3">
-          {/* Anahtar */}
           <button onClick={() => setShowCoinModal(true)}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold transition hover:opacity-80"
             style={{ background: 'rgba(251,191,36,0.12)', color: '#FBBF24', border: '1px solid rgba(251,191,36,0.25)' }}>
             🗝️ {coinBalance} Anahtar
           </button>
 
-          {/* Fırsat Köşesi hızlı erişim */}
           {unreadUrgentCount > 0 && (
             <button
               onClick={() => setActiveTab('firsat')}
@@ -333,10 +341,8 @@ export default function CorporateDashboard() {
               style={{ background: 'rgba(245,158,11,0.15)', color: '#F59E0B', border: '1px solid rgba(245,158,11,0.3)' }}
             >
               🔥 Fırsat Köşesi
-              <span
-                className="w-4 h-4 rounded-full flex items-center justify-center text-xs font-extrabold"
-                style={{ background: '#F59E0B', color: '#fff' }}
-              >
+              <span className="w-4 h-4 rounded-full flex items-center justify-center text-xs font-extrabold"
+                style={{ background: '#F59E0B', color: '#fff' }}>
                 {unreadUrgentCount}
               </span>
             </button>
@@ -356,7 +362,6 @@ export default function CorporateDashboard() {
             <span className="text-white text-sm font-medium hidden sm:block">Referans Emlak</span>
           </button>
 
-          {/* Çıkış */}
           <button
             onClick={handleLogout}
             className="px-3 py-1.5 rounded-xl text-xs font-medium transition hover:opacity-80"
@@ -372,10 +377,10 @@ export default function CorporateDashboard() {
         {/* Stats */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-8">
           {[
-            { label: 'Toplam İlan',         value: visibleListings.length,                               color: '#2F80ED', bg: '#EFF6FF' },
-            { label: 'Aktif İlan',          value: visibleListings.filter(l=>l.status==='Aktif').length, color: '#10B981', bg: '#F0FDF4' },
-            { label: 'Toplam Eşleşme',      value: totalMatches,                                          color: '#8B5CF6', bg: '#F5F3FF' },
-            { label: 'Acil Talep',          value: urgentRequests.length,                                 color: '#F59E0B', bg: '#FFFBEB' },
+            { label: 'Toplam İlan',  value: visibleListings.length,                               color: '#2F80ED', bg: '#EFF6FF' },
+            { label: 'Aktif İlan',   value: visibleListings.filter(l=>l.status==='Aktif').length, color: '#10B981', bg: '#F0FDF4' },
+            { label: 'Gelen Talep',  value: matchedReqs.length,                                    color: '#8B5CF6', bg: '#F5F3FF' },
+            { label: 'Acil Talep',   value: urgentRequests.length,                                 color: '#F59E0B', bg: '#FFFBEB' },
           ].map(s => (
             <div key={s.label} className="rounded-2xl p-4 text-center" style={{ background: s.bg }}>
               <p className="text-2xl font-extrabold" style={{ color: s.color }}>{s.value}</p>
@@ -398,10 +403,8 @@ export default function CorporateDashboard() {
             >
               {tab.label}
               {tab.badge > 0 && (
-                <span
-                  className="w-4 h-4 rounded-full flex items-center justify-center text-xs font-extrabold"
-                  style={{ background: '#F59E0B', color: '#fff' }}
-                >
+                <span className="w-4 h-4 rounded-full flex items-center justify-center text-xs font-extrabold"
+                  style={{ background: '#F59E0B', color: '#fff' }}>
                   {tab.badge}
                 </span>
               )}
@@ -431,37 +434,166 @@ export default function CorporateDashboard() {
                 <CorporateListingCard
                   key={listing.id}
                   listing={listing}
-                  matchCount={(listingMatches[listing.id] || []).length}
+                  matchCount={0}
                   onEdit={handleEdit}
                   onDelete={handleDelete}
                   onRenew={handleRenew}
-                  onViewMatches={l => setMatchModal({ listing: l, matches: listingMatches[l.id] || [] })}
+                  onViewMatches={() => setActiveTab('talepler')}
                 />
               ))}
             </div>
           )
         )}
 
+        {/* ── Gelen Talepler (eşleşen, sansürlü + açma) ── */}
+        {activeTab === 'talepler' && (
+          <div>
+            <div className="rounded-2xl p-5 mb-6"
+              style={{ background: 'linear-gradient(135deg,#0D1B2A,#1a3a5c)', boxShadow: '0 4px 20px rgba(13,27,42,0.15)' }}>
+              <div className="flex items-start justify-between">
+                <div>
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="text-2xl">📥</span>
+                    <h2 className="text-lg font-extrabold text-white">Gelen Talepler</h2>
+                  </div>
+                  <p className="text-sm" style={{ color: '#94a3b8' }}>
+                    İlanlarınızla eşleşen müşteri talepleri. İletişim bilgileri 50 anahtar ile açılır.
+                  </p>
+                </div>
+                <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold flex-shrink-0"
+                  style={{ background: 'rgba(251,191,36,0.15)', color: '#FBBF24', border: '1px solid rgba(251,191,36,0.3)' }}>
+                  🗝️ {coinBalance} Anahtar
+                </div>
+              </div>
+            </div>
+
+            {loadingMatched ? (
+              <div className="text-center py-16" style={{ color: '#9CA3AF' }}>
+                <p className="text-sm">Talepler yükleniyor...</p>
+              </div>
+            ) : matchedReqs.length === 0 ? (
+              <div className="text-center py-16">
+                <p className="text-4xl mb-3">📥</p>
+                <p className="text-sm font-medium" style={{ color: '#374151' }}>
+                  İlanlarınızla eşleşen talep bulunmuyor.
+                </p>
+                <p className="text-xs mt-1" style={{ color: '#9CA3AF' }}>
+                  Yeni ilan ekledikçe ve müşteriler talep oluşturdukça burada görünecek.
+                </p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+                {matchedReqs.map(req => {
+                  const key = `${req.request_id}-${req.listing_id}`;
+                  const opened = unlockedMatched[key];
+                  const isOpen = !!opened;
+                  const isUnlocking = unlockingId === key;
+                  return (
+                    <div key={req.match_id}
+                      className="rounded-2xl overflow-hidden"
+                      style={{ background: '#fff',
+                        border: isOpen ? '1.5px solid #86EFAC' : '1.5px solid #C4B5FD',
+                        boxShadow: isOpen ? '0 4px 16px rgba(16,185,129,0.1)' : '0 4px 16px rgba(139,92,246,0.1)' }}>
+                      {/* Üst şerit */}
+                      <div className="flex items-center justify-between px-4 py-2.5"
+                        style={{ background: isOpen ? '#F0FDF4' : '#F5F3FF' }}>
+                        <span className="text-xs font-bold px-2.5 py-1 rounded-full"
+                          style={{ background: '#8B5CF6', color: '#fff' }}>
+                          🎯 {req.match_score}/8 kriter
+                        </span>
+                        {isOpen && (
+                          <span className="text-xs font-bold px-2.5 py-1 rounded-full"
+                            style={{ background: '#D1FAE5', color: '#059669' }}>
+                            ✅ Açıldı
+                          </span>
+                        )}
+                      </div>
+
+                      <div className="p-4">
+                        {/* Kişi */}
+                        <div className="flex items-center gap-3 mb-4 px-4 py-3 rounded-xl"
+                          style={{ background: isOpen ? '#F0FDF4' : '#F9FAFB', border: '1px solid #E5E7EB' }}>
+                          <div className="w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold flex-shrink-0"
+                            style={{ background: isOpen ? '#10B981' : '#E5E7EB', color: isOpen ? '#fff' : '#9CA3AF' }}>
+                            {isOpen
+                              ? `${(opened.first_name||'').charAt(0)}${(opened.last_name||'').charAt(0)}`
+                              : '🔒'}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-bold" style={{ color: '#0D1B2A' }}>
+                              {isOpen ? `${opened.first_name} ${opened.last_name}` : req.masked_name}
+                            </p>
+                            <p className="text-xs mt-0.5" style={{ color: isOpen ? '#2F80ED' : '#9CA3AF' }}>
+                              📞 {isOpen ? opened.phone : req.masked_phone}
+                            </p>
+                          </div>
+                        </div>
+
+                        <p className="text-xs mb-3 font-medium" style={{ color: '#8B5CF6' }}>
+                          🏠 Eşleşen ilanınız: {req.listing_title}
+                        </p>
+
+                        <div className="grid grid-cols-2 gap-x-4 gap-y-2.5 mb-4">
+                          {[
+                            { label: 'Mahalle',   value: `📍 ${req.neighborhood || '—'}` },
+                            { label: 'Oda',       value: `🛏 ${req.rooms || '—'}` },
+                            { label: 'Min Bütçe', value: fmtMoney(req.min_budget) },
+                            { label: 'Max Bütçe', value: fmtMoney(req.max_budget) },
+                          ].map(item => (
+                            <div key={item.label}>
+                              <p className="text-xs" style={{ color: '#9CA3AF' }}>{item.label}</p>
+                              <p className="text-xs font-semibold" style={{ color: '#374151' }}>{item.value}</p>
+                            </div>
+                          ))}
+                        </div>
+
+                        <p className="text-xs mb-4 pb-3"
+                          style={{ color: '#9CA3AF', borderBottom: '1px solid #F3F4F6' }}>
+                          📅 {req.created_at ? new Date(req.created_at).toLocaleDateString('tr-TR') : '—'}
+                        </p>
+
+                        {!isOpen ? (
+                          <button
+                            onClick={() => handleUnlockMatched(req)}
+                            disabled={isUnlocking}
+                            className="w-full py-3 rounded-xl text-white text-sm font-bold transition hover:opacity-90 active:scale-95"
+                            style={{
+                              background: isUnlocking ? '#94a3b8'
+                                : coinBalance >= 50 ? 'linear-gradient(90deg,#8B5CF6,#7C3AED)' : '#D1D5DB',
+                              boxShadow: !isUnlocking && coinBalance >= 50 ? '0 3px 12px rgba(139,92,246,0.3)' : 'none',
+                              cursor: isUnlocking ? 'not-allowed' : coinBalance >= 50 ? 'pointer' : 'not-allowed',
+                            }}
+                          >
+                            {isUnlocking ? 'Açılıyor...' : '🗝️ 50 Anahtar ile İletişim Bilgilerini Aç'}
+                          </button>
+                        ) : (
+                          <div className="w-full py-2.5 rounded-xl text-sm font-semibold text-center"
+                            style={{ background: '#D1FAE5', color: '#059669' }}>
+                            ✅ İletişim bilgileri açıldı
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
+
         {/* ── Fırsat Köşesi ── */}
         {activeTab === 'firsat' && (
           <div>
-            <div
-              className="rounded-2xl p-5 mb-6"
-              style={{
-                background: 'linear-gradient(135deg,#0D1B2A,#1a3a5c)',
-                boxShadow: '0 4px 20px rgba(13,27,42,0.15)',
-              }}
-            >
+            <div className="rounded-2xl p-5 mb-6"
+              style={{ background: 'linear-gradient(135deg,#0D1B2A,#1a3a5c)', boxShadow: '0 4px 20px rgba(13,27,42,0.15)' }}>
               <div className="flex items-start justify-between">
                 <div>
                   <div className="flex items-center gap-2 mb-2">
                     <span className="text-2xl">🔥</span>
                     <h2 className="text-lg font-extrabold text-white">Fırsat Köşesi</h2>
                     {unreadUrgentCount > 0 && (
-                      <span
-                        className="text-xs font-bold px-2.5 py-1 rounded-full"
-                        style={{ background: '#F59E0B', color: '#fff' }}
-                      >
+                      <span className="text-xs font-bold px-2.5 py-1 rounded-full"
+                        style={{ background: '#F59E0B', color: '#fff' }}>
                         {unreadUrgentCount} yeni
                       </span>
                     )}
@@ -470,10 +602,8 @@ export default function CorporateDashboard() {
                     Acil öncelikli müşteri taleplerini burada görüntüleyebilirsiniz.
                   </p>
                 </div>
-                <div
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold flex-shrink-0"
-                  style={{ background: 'rgba(251,191,36,0.15)', color: '#FBBF24', border: '1px solid rgba(251,191,36,0.3)' }}
-                >
+                <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold flex-shrink-0"
+                  style={{ background: 'rgba(251,191,36,0.15)', color: '#FBBF24', border: '1px solid rgba(251,191,36,0.3)' }}>
                   🗝️ {coinBalance} Anahtar
                 </div>
               </div>
@@ -482,9 +612,7 @@ export default function CorporateDashboard() {
             {urgentRequests.length === 0 ? (
               <div className="text-center py-16" style={{ color: '#9CA3AF' }}>
                 <p className="text-4xl mb-3">🔥</p>
-                <p className="text-sm font-medium" style={{ color: '#374151' }}>
-                  Henüz acil talep bulunmuyor.
-                </p>
+                <p className="text-sm font-medium" style={{ color: '#374151' }}>Henüz acil talep bulunmuyor.</p>
               </div>
             ) : (
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
@@ -621,7 +749,7 @@ export default function CorporateDashboard() {
           matches={matchModal.matches}
           onClose={() => setMatchModal(null)}
           coinBalance={coinBalance}
-          onUnlock={handleUnlock}
+          onUnlock={() => {}}
           unlockedContacts={unlockedContacts}
         />
       )}
